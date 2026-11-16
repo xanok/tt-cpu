@@ -29,6 +29,9 @@ VERILOG_SOURCES += $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/verilog/sky130_f
 # this gets copied in by the GDS action workflow
 VERILOG_SOURCES += $(PWD)/gate_level_netlist.v
 
+# empty module for the silicon-art macro instance in the netlist
+VERILOG_SOURCES += $(PWD)/../macros/unisc_logo_stub.v
+
 endif
 
 # Allow sharing configuration between design and testbench via `include`:

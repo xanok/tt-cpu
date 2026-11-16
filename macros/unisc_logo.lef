@@ -1,0 +1,15 @@
+VERSION 5.7 ;
+BUSBITCHARS "[]" ;
+DIVIDERCHAR "/" ;
+MACRO unisc_logo
+  CLASS BLOCK ;
+  FOREIGN unisc_logo 0 0 ;
+  ORIGIN 0 0 ;
+  SIZE 10.800 BY 10.800 ;
+  SYMMETRY X Y ;
+  OBS
+    LAYER met4 ;
+      RECT 0.000 0.000 10.800 10.800 ;
+  END
+END unisc_logo
+END LIBRARY

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="118.8" height="118.8" viewBox="-5.4 -113.4 118.8 118.8">
+<defs>
+<style type="text/css">
+.l235d4 {stroke: #0067A5; fill: #0067A5; fill-opacity: 0.5;}
+.l71d20 {stroke: #B3446C; fill: #B3446C; fill-opacity: 0.5;}
+</style>
+</defs>
+<rect x="-5.4" y="-113.4" width="118.8" height="118.8" fill="#203060" stroke="none"/>
+<g id="unisc_logo" transform="scale(1 -1)">
+<polygon id="0x5eaf4b956660" class="l71d20" points="33,75 33,103 5,103 5,75"/>
+<polygon id="0x5eaf4b956720" class="l71d20" points="68,75 68,103 40,103 40,75"/>
+<polygon id="0x5eaf4b8bfa90" class="l71d20" points="33,40 33,68 5,68 5,40"/>
+<polygon id="0x5eaf4b8bfb50" class="l71d20" points="68,40 68,68 40,68 40,40"/>
+<polygon id="0x5eaf4b892170" class="l71d20" points="103,40 103,68 75,68 75,40"/>
+<polygon id="0x5eaf4b8bcf90" class="l71d20" points="68,5 68,33 40,33 40,5"/>
+<polygon id="0x5eaf4b8bd050" class="l71d20" points="103,5 103,33 75,33 75,5"/>
+<polygon id="0x5eaf4b9003c0" class="l71d20" points="33,5 33,33 5,33 5,5"/>
+<polygon id="0x5eaf4b900480" class="l71d20" points="75,103 75,82 82,82 82,96 96,96 96,82 82,82 75,82 75,75 103,75 103,103"/>
+<polygon id="0x5eaf4b735970" class="l235d4" points="0,0 108,0 108,108 0,108"/>
+</g>
+</svg>

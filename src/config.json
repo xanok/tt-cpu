@@ -31,6 +31,22 @@
   "//": "https://tinytapeout.com/faq/#how-can-i-map-an-additional-external-clock-to-one-of-the-gpios",
   "CLOCK_PORT": "clk",
 
+  "//": "Silicon art: UNISC grid icon on met4 (tools/make_logo.py art/unisc_icon.txt --pixel 0.7), between the 1st and 2nd PDN stripe pairs",
+  "MACROS": {
+    "unisc_logo": {
+      "instances": {
+        "logo": {
+          "location": [34.77, 5.44],
+          "orientation": "N"
+        }
+      },
+      "gds": ["dir::../macros/unisc_logo.gds"],
+      "lef": ["dir::../macros/unisc_logo.lef"]
+    }
+  },
+  "IGNORE_DISCONNECTED_MODULES": ["unisc_logo", "logo"],
+  "ERROR_ON_DISCONNECTED_PINS": false,
+
   "//": "Configuration docs: https://librelane.readthedocs.io/en/latest/reference/configuration.html",
 
   "//": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",

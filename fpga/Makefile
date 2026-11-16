@@ -16,7 +16,7 @@ build/prog.hex: $(PROG) ../tools/asm.py | build
 	python3 ../tools/asm.py $(PROG) -o $@
 
 build/synth.json: $(SRCS) build/prog.hex
-	yosys -q -l build/yosys.log -p "read_verilog $(SRCS); synth_gowin -top tangnano20k_top -json $@"
+	yosys -q -l build/yosys.log -p "read_verilog -DSYNTH_FPGA $(SRCS); synth_gowin -top tangnano20k_top -json $@"
 
 build/pnr.json: build/synth.json tangnano20k.cst
 	nextpnr-himbaechel -q -l build/nextpnr.log --json $< --write $@ \
