@@ -1,5 +1,5 @@
-; Binary counter on the Tang Nano LEDs (about 2 steps per second at 27 MHz).
-; Each instruction takes ~100-180 clocks because every byte comes over SPI.
+; Binary counter on the Tang Nano LEDs (a few steps per second at 27 MHz).
+; Each instruction takes ~85-150 clocks because every byte comes over SPI.
 
         LDI 0
         STA count

@@ -32,13 +32,15 @@ Code and data share one 4 KB address space in the external SPI RAM. Execution st
 
 ## Timing
 
-SCK runs at clk/2. Every fetch is one 48-bit SPI read (96 clocks). Memory operands and `STA` add another 40-bit transaction (80 clocks). That works out to about 100 clocks for most instructions and about 180 for memory instructions.
+The memory is 23LC512-style: READ `0x03` / WRITE `0x02` followed by a **16-bit address**, the same protocol as the TT demo board's RP2040 [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu). The CPU sends the top 4 address bits as 0.
+
+SCK runs at clk/2. Every fetch is one 40-bit SPI read (80 clocks). Memory operands and `STA` add another 32-bit transaction (64 clocks). That works out to about 85 clocks for most instructions and about 150 for memory instructions.
 
 ## STRLEN
 
 `STRLEN ea` is a normal (multi-cycle) instruction, not a co-processor. It sends a single SPI READ for `ea` and keeps CS low. The RAM streams consecutive bytes in sequential mode, and the CPU counts them into A until a `0x00` byte arrives. It stops at 255 if no NUL turns up, and then sets C.
 
-Cost: about 115 clocks of setup, then about 18 clocks per character (16 SPI clocks plus 2 to check and count). For a 64-character string that is about 1,470 clocks, against about 83,600 for the equivalent software loop (57× faster).
+Cost: about 50 clocks of setup, then about 18 clocks per character (16 SPI clocks plus 2 to check and count). A 64-character string takes about 1,400 clocks, including the fetch of STRLEN itself, against about 69,000 for the equivalent software loop (49× faster).
 
 The string address wraps at 4 KB.
 

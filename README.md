@@ -30,4 +30,4 @@ On the Tang Nano 20K the 6 LEDs show `uo_out[5:0]`, and buttons S1/S2 feed `ui_i
 - Make the repo public (TT needs public GitHub Actions).
 - Fill in `author` / `discord` in `info.yaml`.
 - Push to GitHub. The `gds` action hardens the design and shows whether it fits the tile count.
-- Decide how the program gets into the SPI RAM on the real board.
+- Write the RP2040 loader. spi-ram-emu provides the RAM, and the loader copies `prog.hex` into it before releasing reset.

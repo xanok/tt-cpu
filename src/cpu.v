@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * - One accumulator A, flags Z and C, 12-bit PC (4 KB address space).
- * - Code and data share one external SPI RAM (23LC1024-style, mode 0,
- *   READ=0x03 / WRITE=0x02, 24-bit address). SCK = clk/2.
+ * - Code and data share one external SPI RAM (23LC512-style, mode 0,
+ *   READ=0x03 / WRITE=0x02, 16-bit address), e.g. the TT demo board's
+ *   RP2040 running spi-ram-emu. SCK = clk/2.
  * - Every instruction is 2 bytes:  [op:4 | hi:4] [lo:8]
  *     ea  = {hi, lo}  (12-bit address)    imm = lo
  *   See docs/isa.md for the full table.
@@ -46,13 +47,13 @@ module cpu8 (
   wire [11:0] ea = {ir[3:0], arg};
 
   // ---------------- SPI shifter ----------------
-  reg  [39:0] tx;      // cmd(8) addr(24) wdata(8), shifted out MSB first
+  reg  [31:0] tx;      // cmd(8) addr(16) wdata(8), shifted out MSB first
   reg  [15:0] rx;      // last 16 bits received
   reg  [5:0]  bitcnt;
   reg  [5:0]  lastbit; // index of last bit in this transaction
   reg         busy;
 
-  assign spi_mosi = tx[39];
+  assign spi_mosi = tx[31];
   assign halted   = (state == S_HALT);
 
   // ---------------- ALU ----------------
@@ -81,7 +82,7 @@ module cpu8 (
       out_port <= 8'd0;
       spi_cs_n <= 1'b1;
       spi_sck  <= 1'b0;
-      tx       <= 40'd0;
+      tx       <= 32'd0;
       rx       <= 16'd0;
       bitcnt   <= 6'd0;
       lastbit  <= 6'd0;
@@ -95,7 +96,7 @@ module cpu8 (
         end else begin
           spi_sck <= 1'b0;
           rx      <= {rx[14:0], spi_miso};
-          tx      <= {tx[38:0], 1'b0};
+          tx      <= {tx[30:0], 1'b0};
           bitcnt  <= bitcnt + 6'd1;
           if (bitcnt == lastbit) begin
             busy <= 1'b0;
@@ -107,8 +108,8 @@ module cpu8 (
 
       case (state)
         S_FETCH: begin
-          tx       <= {8'h03, 12'h000, pc, 8'h00};
-          lastbit  <= 6'd47;  // 32 header bits + 2 data bytes
+          tx       <= {8'h03, 4'h0, pc, 8'h00};
+          lastbit  <= 6'd39;  // 24 header bits + 2 data bytes
           bitcnt   <= 6'd0;
           busy     <= 1'b1;
           spi_cs_n <= 1'b0;
@@ -132,16 +133,16 @@ module cpu8 (
             end
             OP_LDA, OP_ADD, OP_SUB, OP_AND, OP_OR, OP_XOR, OP_CMP,
             OP_STA: begin
-              tx       <= {(op == OP_STA) ? 8'h02 : 8'h03, 12'h000, ea, a};
-              lastbit  <= 6'd39;
+              tx       <= {(op == OP_STA) ? 8'h02 : 8'h03, 4'h0, ea, a};
+              lastbit  <= 6'd31;
               bitcnt   <= 6'd0;
               busy     <= 1'b1;
               spi_cs_n <= 1'b0;
               state    <= S_MWAIT;
             end
             OP_STR: begin  // STRLEN ea: one sequential read, count until NUL
-              tx       <= {8'h03, 12'h000, ea, 8'h00};
-              lastbit  <= 6'd39;
+              tx       <= {8'h03, 4'h0, ea, 8'h00};
+              lastbit  <= 6'd31;
               bitcnt   <= 6'd0;
               busy     <= 1'b1;
               spi_cs_n <= 1'b0;
@@ -182,7 +183,7 @@ module cpu8 (
             state    <= S_FETCH;
           end else begin
             a      <= a + 8'd1;
-            bitcnt <= 6'd32;  // clock in one more data byte
+            bitcnt <= 6'd24;  // clock in one more data byte
             busy   <= 1'b1;
           end
         end
