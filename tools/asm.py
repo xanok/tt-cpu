@@ -7,6 +7,7 @@ Syntax (one statement per line, ';' starts a comment, case-insensitive):
             STA count
             .org 0x100      ; set location counter
     count:  .byte 0, 1, 2   ; raw bytes
+    msg:    .asciz "hi\n"  ; string + NUL terminator (.ascii: no NUL)
 
 Usage:  asm.py prog.asm -o prog.hex     (hex = one byte per line, for $readmemh)
 """
@@ -16,10 +17,10 @@ import sys
 
 ADDR_OPS = {"LDA": 0x1, "STA": 0x2, "ADD": 0x3, "SUB": 0x4, "AND": 0x5,
             "OR": 0x6, "XOR": 0x7, "JMP": 0x9, "JZ": 0xA, "JC": 0xB,
-            "JNZ": 0xC, "CMP": 0xE}
+            "JNZ": 0xC, "CMP": 0xE, "STRLEN": 0xF}
 IMM_OPS = {"LDI": 0x0, "ADI": 0x8}
 MISC_OPS = {"OUT": 0xD0, "IN": 0xD1, "SHL": 0xD2, "SHR": 0xD3, "NOT": 0xD4,
-            "NOP": 0xDF, "HLT": 0xF0}
+            "HLT": 0xD5, "NOP": 0xDF}
 MEM_SIZE = 4096
 
 
@@ -49,7 +50,8 @@ def assemble(src):
     """Return a bytearray of MEM_SIZE bytes."""
     lines = []
     for n, raw in enumerate(src.splitlines(), 1):
-        line = raw.split(";", 1)[0].strip()
+        # strip ';' comments, but not inside "strings" or ';' char literals
+        line = re.match(r"""((?:"(?:[^"\\]|\\.)*"|'.'|[^;"'])*)""", raw).group(1).strip()
         while (m := re.match(r"([A-Za-z_]\w*):\s*", line)):
             lines.append((n, "label", m.group(1).lower(), None))
             line = line[m.end():]
@@ -74,6 +76,13 @@ def assemble(src):
                 continue
             if name == ".BYTE":
                 out = [_value(a, known, n) & 0xFF for a in args.split(",")]
+            elif name in (".ASCIZ", ".ASCII"):
+                m = re.fullmatch(r'"((?:[^"\\]|\\.)*)"', args.strip())
+                if not m:
+                    raise AsmError(f"line {n}: {name} needs a quoted string")
+                out = list(m.group(1).encode().decode("unicode_escape").encode("latin-1"))
+                if name == ".ASCIZ":
+                    out.append(0)
             elif name in ADDR_OPS:
                 ea = _value(args, known, n)
                 if pass_no == 2 and not 0 <= ea < MEM_SIZE:

@@ -22,9 +22,8 @@ def u(sig):
 async def boot(dut, src, ui=0):
     """Load program, reset the CPU and start the clock."""
     image = assemble(src)
-    used = max((i for i, b in enumerate(image) if b), default=0) + 1
-    for i in range(max(used, 256)):
-        dut.ram.mem[i].value = image[i]
+    for i, byte in enumerate(image):  # whole 4 KB: clears leftovers from earlier tests
+        dut.ram.mem[i].value = byte
     cocotb.start_soon(Clock(dut.clk, 100, unit="ns").start())  # 10 MHz
     dut.ena.value = 1
     dut.ui_in.value = ui
@@ -176,3 +175,84 @@ loop:   OUT
         if len(seen) == 6:
             break
     assert seen == [0, 1, 2, 3, 4, 5]
+
+
+async def cycles_to_halt(dut, max_cycles=200_000):
+    for n in range(max_cycles):
+        await RisingEdge(dut.clk)
+        if (u(dut.uio_out) >> HALTED) & 1:
+            return n
+    raise AssertionError("CPU did not halt")
+
+
+@cocotb.test()
+async def test_strlen(dut):
+    """STRLEN on several strings, results stored to memory; the code after
+    each STRLEN must keep running normally (CS released correctly)."""
+    await boot(dut, """
+        STRLEN hello
+        STA r0
+        STRLEN empty
+        JNZ fail        ; empty string sets Z
+        STA r1
+        STRLEN odd      ; string at an odd address in another page
+        STA r2
+        JC fail         ; NUL found -> C clear
+        LDI 0x77
+        OUT
+        HLT
+fail:   LDI 0xEE
+        OUT
+        HLT
+r0:     .byte 0xAA
+r1:     .byte 0xAA
+r2:     .byte 0xAA
+hello:  .asciz "hello"
+empty:  .asciz ""
+        .org 0x3A1
+odd:    .asciz "a;b tiny tapeout!"
+""")
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 0x77
+    base = 0x1C  # r0 address (14 two-byte instructions)
+    assert [mem(dut, base + i) for i in range(3)] == [5, 0, 17]
+
+
+@cocotb.test()
+async def test_strlen_saturates(dut):
+    """No NUL within 255 bytes: A = 255 and C = 1."""
+    src = "STRLEN s\nJC ok\nLDI 0xEE\nOUT\nHLT\nok: OUT\nHLT\n.org 0x100\ns: .byte " + \
+          ", ".join(["0x41"] * 300) + ", 0"
+    await boot(dut, src)
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 255
+
+
+@cocotb.test()
+async def test_strlen_speed(dut):
+    """Hardware STRLEN vs the equivalent software loop on a 64-char string."""
+    string = ".org 0x200\ns: .asciz \"" + "x" * 64 + "\"\n"
+    await boot(dut, "STRLEN s\nOUT\nHLT\n" + string)
+    hw = await cycles_to_halt(dut)
+    assert u(dut.uo_out) == 64
+
+    # software: n = 0; while (*p) { n++; p++ } using self-modifying LDA
+    await boot(dut, """
+loop:   LDA s           ; operand byte patched below
+        JZ done
+        LDA n
+        ADI 1
+        STA n
+        LDA loop+1
+        ADI 1
+        STA loop+1
+        JMP loop        ; (fits: 64-char string stays within one page)
+done:   LDA n
+        OUT
+        HLT
+n:      .byte 0
+""" + string)
+    sw = await cycles_to_halt(dut)
+    assert u(dut.uo_out) == 64
+    dut._log.info(f"strlen(64 chars): hardware {hw} cycles, software {sw} cycles "
+                  f"({sw / hw:.1f}x faster)")

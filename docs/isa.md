@@ -25,10 +25,30 @@ Code and data share one 4 KB address space in the external SPI RAM. Execution st
 |   | `SHL` (D2) | C ← A ← 0 | Z, C |
 |   | `SHR` (D3) | 0 → A → C | Z, C |
 |   | `NOT` (D4) | A = ~A | Z |
-|   | `NOP` (DF, D5–DE) | nothing | – |
+|   | `HLT` (D5) | stop (HALTED pin high) until reset | – |
+|   | `NOP` (DF, D6–DE) | nothing | – |
 | E | `CMP ea`  | flags of A − M[ea], A unchanged | Z, C |
-| F | `HLT`     | stop (HALTED pin high) until reset | – |
+| F | `STRLEN ea` | A = length of the NUL-terminated string at ea (max 255) | Z = empty, C = no NUL within 255 bytes |
 
 ## Timing
 
 SCK runs at clk/2. Every fetch is one 48-bit SPI read (96 clocks). Memory operands and `STA` add another 40-bit transaction (80 clocks). That works out to about 100 clocks for most instructions and about 180 for memory instructions.
+
+## STRLEN
+
+`STRLEN ea` is a normal (multi-cycle) instruction, not a co-processor. It sends a single SPI READ for `ea` and keeps CS low. The RAM streams consecutive bytes in sequential mode, and the CPU counts them into A until a `0x00` byte arrives. It stops at 255 if no NUL turns up, and then sets C.
+
+Cost: about 115 clocks of setup, then about 18 clocks per character (16 SPI clocks plus 2 to check and count). For a 64-character string that is about 1,470 clocks, against about 83,600 for the equivalent software loop (57× faster).
+
+The string address wraps at 4 KB.
+
+```
+        STRLEN msg      ; A = 5
+        JZ  empty       ; Z set if the string is ""
+        ...
+msg:    .asciz "hello"
+```
+
+## Assembler directives
+
+`.org addr`, `.byte v, ...`, `.ascii "text"`, and `.asciz "text"` (which appends a NUL). Strings accept `\n`-style escapes.

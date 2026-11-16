@@ -27,13 +27,14 @@ module cpu8 (
   localparam OP_LDI = 4'h0, OP_LDA = 4'h1, OP_STA = 4'h2, OP_ADD = 4'h3,
              OP_SUB = 4'h4, OP_AND = 4'h5, OP_OR  = 4'h6, OP_XOR = 4'h7,
              OP_ADI = 4'h8, OP_JMP = 4'h9, OP_JZ  = 4'hA, OP_JC  = 4'hB,
-             OP_JNZ = 4'hC, OP_MSC = 4'hD, OP_CMP = 4'hE, OP_HLT = 4'hF;
+             OP_JNZ = 4'hC, OP_MSC = 4'hD, OP_CMP = 4'hE, OP_STR = 4'hF;
 
   localparam S_FETCH = 3'd0,  // start 2-byte read at PC
              S_FWAIT = 3'd1,  // wait for instruction bytes
              S_EXEC  = 3'd2,  // execute / start memory access
              S_MWAIT = 3'd3,  // wait for data read or write
-             S_HALT  = 3'd4;
+             S_HALT  = 3'd4,
+             S_STRL  = 3'd5;  // STRLEN: stream bytes until NUL
 
   reg  [2:0]  state;
   reg  [11:0] pc;
@@ -97,8 +98,9 @@ module cpu8 (
           tx      <= {tx[38:0], 1'b0};
           bitcnt  <= bitcnt + 6'd1;
           if (bitcnt == lastbit) begin
-            busy     <= 1'b0;
-            spi_cs_n <= 1'b1;
+            busy <= 1'b0;
+            // STRLEN keeps CS low so the RAM keeps streaming sequential bytes
+            if (state != S_STRL) spi_cs_n <= 1'b1;
           end
         end
       end
@@ -137,6 +139,15 @@ module cpu8 (
               spi_cs_n <= 1'b0;
               state    <= S_MWAIT;
             end
+            OP_STR: begin  // STRLEN ea: one sequential read, count until NUL
+              tx       <= {8'h03, 12'h000, ea, 8'h00};
+              lastbit  <= 6'd39;
+              bitcnt   <= 6'd0;
+              busy     <= 1'b1;
+              spi_cs_n <= 1'b0;
+              a        <= 8'd0;
+              state    <= S_STRL;
+            end
             OP_JMP: pc <= ea;
             OP_JZ:  if (zf)  pc <= ea;
             OP_JC:  if (cf)  pc <= ea;
@@ -147,9 +158,9 @@ module cpu8 (
               4'h2: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end // SHL
               4'h3: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end // SHR
               4'h4: begin a <= ~a; zf <= (a == 8'hFF); end            // NOT
+              4'h5: state <= S_HALT;                                  // HLT
               default: ;                                              // NOP
             endcase
-            OP_HLT: state <= S_HALT;
             default: ;
           endcase
         end
@@ -161,6 +172,19 @@ module cpu8 (
             zf <= (alu[7:0] == 8'd0);
           end
           state <= S_FETCH;
+        end
+
+        S_STRL: if (!busy) begin
+          if (rx[7:0] == 8'd0 || a == 8'hFF) begin
+            spi_cs_n <= 1'b1;
+            zf       <= (a == 8'd0);
+            cf       <= (rx[7:0] != 8'd0);  // no NUL within 255 bytes
+            state    <= S_FETCH;
+          end else begin
+            a      <= a + 8'd1;
+            bitcnt <= 6'd32;  // clock in one more data byte
+            busy   <= 1'b1;
+          end
         end
 
         default: ;  // S_HALT: stay until reset
