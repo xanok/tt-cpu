@@ -25,9 +25,19 @@ check() {  # check NAME EXPECTED_EXIT PATTERN -- command...
     fi
 }
 
-# A 300-byte "program" with known contents.
+# Real cpu8 programs (the mock board runs them with the cpu8sim core).
+ASM=../../tools/cpu8asm
+SIM=../../tools/cpu8sim
+make -s -C ../../tools cpu8asm cpu8sim || exit 1
+printf 'IN\nXRI 0xFF\nSTA 0xFFE\nLDI 0x77\nSTA 0xFFF\nOUT\nHLT\n' > "$TMP/inv.asm"
+$ASM -o "$TMP/inv.bin" "$TMP/inv.asm" || exit 1
+$ASM -o "$TMP/count.bin" ../../programs/count.asm || exit 1
+$ASM -o "$TMP/hello.bin" ../../programs/hello.asm || exit 1
+printf 'loop: JMP loop\n' > "$TMP/forever.asm"
+$ASM -o "$TMP/forever.bin" "$TMP/forever.asm" || exit 1
+
+# A 300-byte "program" with known contents (upload/verify tests only).
 python3 -c 'import sys; sys.stdout.buffer.write(bytes((i * 7 + 3) & 255 for i in range(300)))' > "$TMP/prog.bin"
-SUM=$(python3 -c 'print("%02X" % (sum((i * 7 + 3) & 255 for i in range(300)) & 255))')
 head -c 4097 /dev/zero > "$TMP/big.bin"
 : > "$TMP/empty.bin"
 
@@ -42,16 +52,36 @@ check "not a tty"       1 "not a serial port"        -- ./cpu8load -d /dev/null 
 check "no device"       1 "cannot open /dev/nonexist" -- ./cpu8load -d /dev/nonexistent "$TMP/prog.bin"
 check "clock too fast"  1 "too fast"                 -- $L -f 50000000 "$TMP/prog.bin"
 check "load+run"        0 "loaded 300 bytes"         -- $L "$TMP/prog.bin"
-check "wait halt"       0 "uo_out = 0x05 (5)  halted = yes" -- $L -p 3 -w "$TMP/prog.bin"
-check "monitor events"  0 "uo_out = 0x03"            -- $L -w -m "$TMP/prog.bin"
+check "wait halt"       0 "uo_out = 0x09 (9)  halted = yes" -- $L -p 3 -w "$TMP/count.bin"
+check "monitor events"  0 "uo_out = 0x03"            -- $L -f 5000 -w -m "$TMP/count.bin"
 grep -q "HALTED" "$TMP/out" || { echo "FAIL monitor shows HALTED"; fails=$((fails + 1)); }
-check "ram dump"        0 "0FF0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 A5 $SUM" \
-                                                     -- $L -w -i 0x5A -r 0xFF0:16 "$TMP/prog.bin"
-check "dump program"    0 "0000: 03 0A 11 18"        -- $L -w -r 0:200 "$TMP/prog.bin"
+check "ram dump"        0 "0FF0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 A5 77" \
+                                                     -- $L -w -i 0x5A -r 0xFF0:16 "$TMP/inv.bin"
+check "dump program"    0 "0000: 03 0A 11 18"        -- $L -r 0:200 "$TMP/prog.bin"
+check "timeout"         2 "did not halt within 1 s"  -- $L -w -t 1 "$TMP/forever.bin"
+check "text output"     0 "^Hello, Tiny Tapeout!$"   -- $L -a "$TMP/hello.bin"
 check "uneven clock"    0 "running at 9523809 Hz"    -- $L -f 9500000 "$TMP/prog.bin"
-check "sysclk"          0 "sys=125000000"            -- $L -s 125000 -w "$TMP/prog.bin"
+check "sysclk"          0 "sys=125000000"            -- $L -s 125000 -w "$TMP/count.bin"
 check "sysclk back"     0 "sys=200000000"            -- $L -s 200000 "$TMP/prog.bin"
 check "bad -r"          1 "outside the 64 KB RAM"    -- $L -r 0xFFF0:32 "$TMP/prog.bin"
+
+# Every halting example: the board's OUT output (-n) must equal cpu8sim's.
+for f in ../../programs/*.asm; do
+    name=$(basename "$f" .asm)
+    grep -q '^; *limit:' "$f" && continue
+    input=$(sed -n 's/^; *input: *//p' "$f" | head -1)
+    $ASM -o "$TMP/$name.bin" "$f" || { fails=$((fails + 1)); continue; }
+    $SIM -i "${input:-0}" "$TMP/$name.bin" > "$TMP/$name.sim"
+    $L -n -i "${input:-0}" "$TMP/$name.bin" > "$TMP/$name.board" 2> "$TMP/$name.err"
+    if cmp -s "$TMP/$name.sim" "$TMP/$name.board"; then
+        echo "ok   example $name ($(wc -l < "$TMP/$name.sim") OUT bytes)"
+    else
+        echo "FAIL example $name: board output differs from cpu8sim"
+        diff "$TMP/$name.sim" "$TMP/$name.board" | head -5 | sed 's/^/    /'
+        sed 's/^/    /' "$TMP/$name.err" | tail -3
+        fails=$((fails + 1))
+    fi
+done
 
 # Raw protocol: error replies and resynchronisation.
 python3 -I - "$PTY" > "$TMP/raw" 2>&1 <<'EOF'

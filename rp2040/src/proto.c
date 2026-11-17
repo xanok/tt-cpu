@@ -139,6 +139,7 @@ static void cmd_help(void)
         "# R addr len           read up to 128 bytes -> OK <hex>",
         "# FILL addr len val    fill RAM",
         "# MON 0|1              stream EV UO <hex> <us> / EV HALT <us>",
+        "# (always while running: EV OUT <hexbytes> = bytes written by OUT)",
         "# SYSCLK khz           RP2040 clock (holds reset) -> OK sys=.. clk=..",
         "# BOOT                 reboot to the UF2 bootloader",
         "# numbers: decimal or 0x hex; hexbytes: 2 hex digits per byte",
@@ -150,10 +151,11 @@ static void cmd_help(void)
 
 static void cmd_status(void)
 {
-    reply("OK uo=%02X halted=%d rst=%d clk=%lu ui=%02X sel=%d sys=%lu mon=%d t=%lu",
+    reply("OK uo=%02X halted=%d rst=%d clk=%lu ui=%02X sel=%d sys=%lu mon=%d t=%lu lost=%lu",
           hw_get_uo(), hw_get_halted() ? 1 : 0, st.in_reset ? 1 : 0,
           (unsigned long)st.clk_hz, st.ui, st.sel, (unsigned long)hw_sys_hz(),
-          st.monitor ? 1 : 0, st.in_reset ? 0ul : since_go_us());
+          st.monitor ? 1 : 0, st.in_reset ? 0ul : since_go_us(),
+          (unsigned long)hw_out_lost());
 }
 
 static void cmd_clock(uint32_t hz)
@@ -187,6 +189,7 @@ static void cmd_go(void)
     st.last_uo = hw_get_uo();
     st.last_halted = false;
     st.t_go = hw_time_us();
+    hw_out_clear();
     hw_reset(false);
     st.in_reset = false;
     reply("OK");
@@ -243,8 +246,25 @@ static void cmd_sysclk(uint32_t khz)
     reply("OK sys=%lu clk=%lu", (unsigned long)hw_sys_hz(), (unsigned long)st.clk_hz);
 }
 
+// Send the bytes captured from OUT as "EV OUT <hex>" lines.
+static void send_out_bytes(void)
+{
+    uint8_t buf[64];
+    char hex[2 * sizeof buf + 1];
+    unsigned n;
+    while ((n = hw_out_read(buf, sizeof buf)) > 0) {
+        for (unsigned i = 0; i < n; i++)
+            snprintf(hex + 2 * i, 3, "%02X", buf[i]);
+        reply("EV OUT %s", hex);
+    }
+}
+
 static void execute(char *cmdline)
 {
+    // Output captured so far goes out before any reply, so a host that sees
+    // "halted=1" in an ST reply has already received every OUT byte.
+    send_out_bytes();
+
     char *argv[MAX_ARGS];
     int argc = 0;
     for (char *tok = strtok(cmdline, " \t"); tok; tok = strtok(NULL, " \t")) {
@@ -369,6 +389,7 @@ void proto_input(int c)
 
 void proto_poll(void)
 {
+    send_out_bytes();  // always, and before EV HALT so the output is complete
     if (!st.monitor || st.in_reset)
         return;
     uint8_t uo = hw_get_uo();

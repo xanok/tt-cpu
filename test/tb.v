@@ -23,6 +23,8 @@ module tb ();
   wire [7:0] uo_out;
   wire [7:0] uio_out;
   wire [7:0] uio_oe;
+  wire       halted_pin = uio_out[4];
+  wire       strobe_pin = uio_out[5];  // toggles on every OUT
 `ifdef GL_TEST
   wire VPWR = 1'b1;
   wire VGND = 1'b0;
@@ -57,11 +59,7 @@ module tb ();
   );
 
 `ifndef GL_TEST
-  // Probes for test_programs.py (RTL only): pulse when an OUT instruction
-  // executes, and the number of clocks from reset until HLT.
-  wire       out_strobe = user_project.core.state == 3'd2 && user_project.core.ir == 8'hD0;
-  wire [7:0] out_value  = user_project.core.a;
-  wire       halted_pin = uio_out[4];
+  // For test_programs.py: the number of clocks from reset until HLT.
   reg  [31:0] cycles;
   always @(posedge clk)
     if (!rst_n) cycles <= 32'd0;

@@ -23,4 +23,8 @@ bool     hw_set_sysclk(uint32_t khz); // false if not possible
 void     hw_set_ui(uint8_t v);
 uint8_t  hw_get_uo(void);
 bool     hw_get_halted(void);
+// OUT capture: every edge of OUT_STROBE (uio5) stores the uo_out value.
+unsigned hw_out_read(uint8_t *buf, unsigned max);  // take up to max bytes
+void     hw_out_clear(void);          // empty the buffer, zero the lost count
+uint32_t hw_out_lost(void);           // bytes dropped because the buffer was full
 void     hw_bootloader(void);         // reboot into the UF2 bootloader

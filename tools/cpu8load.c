@@ -30,6 +30,8 @@ static int fd = -1;
 static int verbose;
 static int show_events;     /* -m: print EV UO lines */
 static int seen_halt;       /* got an EV HALT */
+static int out_mode;        /* -a: OUT bytes as text, -n: as numbers, 0: not shown */
+static FILE *info;          /* status messages: stdout, or stderr with -a / -n */
 
 /* ---------------------------------------------------------------- utils */
 
@@ -168,6 +170,16 @@ static void handle_event(const char *line)
     if (sscanf(line, "EV UO %x %lu", &v, &t) == 2) {
         if (show_events)
             printf("%10.3f ms  uo_out = 0x%02X (%3u)\n", t / 1000.0, v, v);
+    } else if (!strncmp(line, "EV OUT ", 7)) {
+        /* bytes the program wrote with OUT, captured on the OUT_STROBE pin */
+        for (const char *p = line + 7; p[0] && p[1]; p += 2) {
+            if (sscanf(p, "%2x", &v) != 1)
+                break;
+            if (out_mode == 'a')
+                putchar((int)v);
+            else if (out_mode == 'n')
+                printf("%u\n", v);
+        }
     } else if (sscanf(line, "EV HALT %lu", &t) == 1) {
         seen_halt = 1;
         if (show_events)
@@ -241,20 +253,21 @@ static void sync_device(const char *dev)
 
 struct status {
     unsigned uo, halted, rst;
-    unsigned long clk, t_us;
+    unsigned long clk, t_us, lost;
 };
 
 static struct status get_status(void)
 {
     char reply[300];
     const char *p;
-    struct status s = { 0, 0, 0, 0, 0 };
+    struct status s = { 0, 0, 0, 0, 0, 0 };
     command(reply, sizeof reply, REPLY_MS, "ST");
     if ((p = strstr(reply, "uo=")))     s.uo = (unsigned)strtoul(p + 3, NULL, 16);
     if ((p = strstr(reply, "halted="))) s.halted = (unsigned)strtoul(p + 7, NULL, 10);
     if ((p = strstr(reply, "rst=")))    s.rst = (unsigned)strtoul(p + 4, NULL, 10);
     if ((p = strstr(reply, "clk=")))    s.clk = strtoul(p + 4, NULL, 10);
     if ((p = strstr(reply, " t=")))     s.t_us = strtoul(p + 3, NULL, 10);
+    if ((p = strstr(reply, "lost=")))   s.lost = strtoul(p + 5, NULL, 10);
     return s;
 }
 
@@ -316,6 +329,10 @@ static void usage(FILE *f)
 "  -i VAL     value for ui_in, the CPU's IN port (default 0)\n"
 "  -s KHZ     set the RP2040 system clock first (default: firmware's 200000)\n"
 "  -w         wait until the CPU executes HLT (HALTED pin high)\n"
+"  -a         print the bytes the program writes with OUT as text\n"
+"             (captured on the OUT_STROBE pin; like cpu8sim -a); implies -w\n"
+"  -n         print the OUT bytes as numbers, one per line; implies -w\n"
+"             (with -a / -n, status messages go to stderr)\n"
 "  -m         monitor: print every uo_out change while running\n"
 "  -t SEC     timeout for -w, run time for -m alone (default 10)\n"
 "  -r A:L     after the run, dump L bytes of RAM from address A\n"
@@ -336,7 +353,7 @@ int main(int argc, char **argv)
     unsigned dump_addr[MAX_DUMPS], dump_len[MAX_DUMPS];
     int opt;
 
-    while ((opt = getopt(argc, argv, "d:p:f:i:s:wmt:r:vh")) != -1) {
+    while ((opt = getopt(argc, argv, "d:p:f:i:s:wanmt:r:vh")) != -1) {
         switch (opt) {
         case 'd': dev = optarg; break;
         case 'p': project = (long)num_arg("-p", optarg, 1023); break;
@@ -344,6 +361,7 @@ int main(int argc, char **argv)
         case 'i': ui = num_arg("-i", optarg, 255); break;
         case 's': sysclk = num_arg("-s", optarg, 1000000); break;
         case 'w': wait_halt = 1; break;
+        case 'a': case 'n': out_mode = opt; wait_halt = 1; break;
         case 'm': monitor = 1; break;
         case 't': timeout_s = num_arg("-t", optarg, 86400); break;
         case 'r': {
@@ -373,6 +391,7 @@ int main(int argc, char **argv)
     }
     if (clk == 0)
         die("-f must be more than 0 Hz");
+    info = out_mode ? stderr : stdout;
 
     /* Read the program. */
     const char *path = argv[optind];
@@ -399,11 +418,11 @@ int main(int argc, char **argv)
     char reply[300];
     if (sysclk) {
         command(reply, sizeof reply, REPLY_MS, "SYSCLK %lu", sysclk);
-        printf("RP2040 clock: %s\n", reply);
+        fprintf(info, "RP2040 clock: %s\n", reply);
     }
     command(NULL, 0, REPLY_MS, "RST");
     if (project >= 0) {
-        printf("selecting project %ld\n", project);
+        fprintf(info, "selecting project %ld\n", project);
         command(NULL, 0, 5000 + 3 * (int)project, "SEL %ld", project);
     } else {
         command(NULL, 0, REPLY_MS, "ATTACH");
@@ -424,24 +443,24 @@ int main(int argc, char **argv)
         if (check[i] != prog[i])
             die("verify failed at 0x%03X: wrote %02X, read %02X",
                 (unsigned)i, prog[i], check[i]);
-    printf("loaded %zu bytes from %s\n", size, path);
+    fprintf(info, "loaded %zu bytes from %s\n", size, path);
 
     command(reply, sizeof reply, REPLY_MS, "CLK %lu", clk);
     unsigned long real_clk = strtoul(reply, NULL, 10);
     if (real_clk != clk)
-        printf("clock: asked %lu Hz, running at %lu Hz\n", clk, real_clk);
+        fprintf(info, "clock: asked %lu Hz, running at %lu Hz\n", clk, real_clk);
     command(NULL, 0, REPLY_MS, "UI %lu", ui);
     if (monitor) {
         show_events = 1;
         command(NULL, 0, REPLY_MS, "MON 1");
     }
     command(NULL, 0, REPLY_MS, "GO");
-    printf("running at %lu Hz, ui_in = 0x%02lX\n", real_clk, ui);
+    fprintf(info, "running at %lu Hz, ui_in = 0x%02lX\n", real_clk, ui);
     fflush(stdout);
 
     /* Wait for HLT and/or monitor uo_out. */
     int rc = 0;
-    struct status st = { 0, 0, 0, 0, 0 };
+    struct status st = { 0, 0, 0, 0, 0, 0 };
     if (wait_halt || monitor) {
         long long deadline = now_ms() + (long long)timeout_s * 1000;
         long long next_poll = 0;
@@ -467,10 +486,14 @@ int main(int argc, char **argv)
                 classify(line, reply, sizeof reply);
         }
     }
-    st = get_status();
+    st = get_status();  /* also flushes the remaining EV OUT lines */
+    fflush(stdout);
     if (monitor)
         command(NULL, 0, REPLY_MS, "MON 0");
-    printf("uo_out = 0x%02X (%u)  halted = %s  (%.3f ms since start)\n", st.uo, st.uo,
+    if (st.lost)
+        fprintf(stderr, "cpu8load: warning: %lu output bytes lost (capture buffer full)\n",
+                st.lost);
+    fprintf(info, "uo_out = 0x%02X (%u)  halted = %s  (%.3f ms since start)\n", st.uo, st.uo,
            st.halted ? "yes" : "no", st.t_us / 1000.0);
 
     for (int i = 0; i < ndumps; i++)

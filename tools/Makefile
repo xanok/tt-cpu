@@ -9,7 +9,7 @@ all: $(TOOLS)
 cpu8asm: cpu8asm.c cpu8isa.h
 	$(CC) $(CFLAGS) -o $@ $<
 
-cpu8sim: cpu8sim.c cpu8isa.h
+cpu8sim: cpu8sim.c cpu8core.h cpu8isa.h
 	$(CC) $(CFLAGS) -o $@ $<
 
 cpu8load: cpu8load.c

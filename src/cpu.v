@@ -20,6 +20,7 @@ module cpu8 (
     input  wire       rst_n,
     input  wire [7:0] in_port,
     output reg  [7:0] out_port,
+    output reg        out_strobe,  // toggles on every OUT (byte-ready for the host)
     output wire       halted,
     output reg        spi_cs_n,
     output reg        spi_sck,
@@ -153,6 +154,7 @@ module cpu8 (
       ir       <= 8'd0;
       arg      <= 8'd0;
       out_port <= 8'd0;
+      out_strobe <= 1'b0;
       spi_cs_n <= 1'b1;
       spi_sck  <= 1'b0;
       tx       <= 40'd0;
@@ -237,7 +239,7 @@ module cpu8 (
             OP_JC:  if (cf)  pc <= ea;
             OP_JNZ: if (!zf) pc <= ea;
             OP_MSC: case (hi)
-              M_OUT: out_port <= a;
+              M_OUT: begin out_port <= a; out_strobe <= ~out_strobe; end
               M_IN:  begin a <= in_port; zf <= (in_port == 8'd0); end
               M_SHL: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end
               M_SHR: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end

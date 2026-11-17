@@ -16,7 +16,8 @@ Each program's header comments hold its expected output. `./run_tests.sh` assemb
 | `reverse.asm` | reverse a string through the stack |
 | `gcd.asm` | Euclid's algorithm as a subroutine |
 | `factorial.asm` | recursion, with `n` saved on the stack |
-| `squares.asm` | decimal printing, nested subroutines |
+| `squares.asm` | decimal printing with `print_dec` from the library |
+| `print_demo.asm` | the print library: strings, decimal, hex, repeated characters |
 | `memcpy.asm` | block copy across a page boundary, verify, checksum |
 | `bits.asm` | reads the input port: popcount, parity, bit reverse |
 | `maxmin.asm` | maximum and minimum, and their positions |
@@ -30,4 +31,7 @@ Each program's header comments hold its expected output. `./run_tests.sh` assemb
 ../tools/cpu8asm -o hello.bin hello.asm
 ../tools/cpu8sim -a hello.bin          # Hello, Tiny Tapeout!
 ../tools/cpu8sim -s -t factorial.bin   # trace + register/clock summary
+../tools/cpu8load -a hello.bin         # on the demo board
 ```
+
+`lib/print.asm` is the text output library (`print`, `print_dec`, `print_hex`, `newline`). Include it with `.include "lib/print.asm"` after your program's last instruction.

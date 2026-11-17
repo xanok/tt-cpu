@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Run every programs/*.asm on the RTL and compare it with the C simulator
 (tools/cpu8sim): the sequence of OUT values, the whole 4 KB memory at HLT
-and the exact number of clocks.
+and the exact number of clocks. OUT values are captured the way the RP2040
+does it: on every edge of the OUT_STROBE pin (uio[5]), read uo_out.
 
 Program header comments used here:
     ; input: N     value on ui_in (IN instruction)
@@ -15,7 +16,7 @@ import tempfile
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, First, RisingEdge
+from cocotb.triggers import ClockCycles, Edge, First, ReadOnly, RisingEdge
 
 from cpu8tools import MEM_SIZE, assemble_file, tool
 
@@ -75,11 +76,12 @@ async def test_program(dut, program):
     outs = []
     timeout = ref_clocks + 1000
     while not int(dut.halted_pin.value):
-        await First(RisingEdge(dut.out_strobe), RisingEdge(dut.halted_pin),
-                    ClockCycles(dut.clk, timeout))
-        if int(dut.out_strobe.value):
-            outs.append(int(dut.out_value.value))
-            await RisingEdge(dut.clk)  # leave the strobe cycle
+        trig = await First(Edge(dut.strobe_pin), RisingEdge(dut.halted_pin),
+                           ClockCycles(dut.clk, timeout))
+        if isinstance(trig, Edge):
+            await ReadOnly()  # uo_out and the strobe change on the same clock edge
+            outs.append(int(dut.uo_out.value))
+            await RisingEdge(dut.clk)
         elif not int(dut.halted_pin.value):
             raise AssertionError(f"{program}: no HLT within {timeout} clocks")
 

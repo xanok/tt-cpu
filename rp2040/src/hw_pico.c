@@ -4,6 +4,9 @@
 
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
+#include "hardware/structs/io_bank0.h"
+#include "hardware/sync.h"
 #include "hardware/pwm.h"
 #include "hardware/vreg.h"
 #include "pico/bootrom.h"
@@ -40,6 +43,51 @@ static void in_pin(unsigned pin)
     gpio_set_pulls(pin, false, true);  // pull-down, like the TT firmware
 }
 
+// ---- OUT capture ----
+// cpu8 toggles OUT_STROBE on every OUT. The pin interrupt (both edges, top
+// priority so USB handling cannot delay it) reads uo_out into a ring buffer.
+// An OUT takes at least 88 project clocks (8.8 us at 10 MHz), and uo_out
+// stays stable until the next one, so there is plenty of time.
+#define OUT_BUF 4096u  // power of two
+static volatile uint8_t out_buf[OUT_BUF];
+static volatile uint32_t out_head, out_tail, out_lost;
+
+// Raw IO_IRQ_BANK0 handler, entirely in RAM (the SDK's GPIO callback
+// dispatcher runs from flash, where a cache miss costs microseconds).
+static void __not_in_flash_func(strobe_irq)(void)
+{
+    // acknowledge both edge events of the strobe pin (write-1-to-clear)
+    io_bank0_hw->intr[PIN_OUT_STROBE / 8] = 0xCu << (4 * (PIN_OUT_STROBE % 8));
+    uint8_t v = UO_FROM_GPIO(gpio_get_all());
+    uint32_t h = out_head;
+    if (h - out_tail < OUT_BUF) {
+        out_buf[h & (OUT_BUF - 1)] = v;
+        out_head = h + 1;
+    } else {
+        out_lost++;
+    }
+}
+
+unsigned hw_out_read(uint8_t *buf, unsigned max)
+{
+    unsigned n = 0;
+    uint32_t t = out_tail;
+    while (n < max && t != out_head)
+        buf[n++] = out_buf[t++ & (OUT_BUF - 1)];
+    out_tail = t;
+    return n;
+}
+
+void hw_out_clear(void)
+{
+    uint32_t irq = save_and_disable_interrupts();
+    out_tail = out_head;
+    out_lost = 0;
+    restore_interrupts(irq);
+}
+
+uint32_t hw_out_lost(void) { return out_lost; }
+
 void hw_init(void)
 {
     // Mux control: nothing selected until SEL.
@@ -59,6 +107,14 @@ void hw_init(void)
     for (int i = 4; i < 8; i++)   // HALTED and unused uio
         in_pin(PIN_UIO(i));
     // uio0..3 (SPI) are set up by setup_simulated_sram().
+
+    for (int i = 0; i < 8; i++)  // UO_FROM_GPIO must agree with PINS_UO
+        if (UO_FROM_GPIO(1u << pins_uo[i]) != (1u << i))
+            panic("pinmap.h: UO_FROM_GPIO does not match PINS_UO");
+    gpio_set_irq_enabled(PIN_OUT_STROBE, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
+    irq_set_exclusive_handler(IO_IRQ_BANK0, strobe_irq);
+    irq_set_priority(IO_IRQ_BANK0, 0);  // highest: USB cannot delay it
+    irq_set_enabled(IO_IRQ_BANK0, true);
 }
 
 void hw_puts(const char *s)

@@ -53,7 +53,7 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 
 | code | Mnemonic | Effect | Flags |
 |------|----------|--------|-------|
-| D0 | `OUT`  | out port = A | – |
+| D0 | `OUT`  | out port = A, and toggle the OUT_STROBE pin | – |
 | D1 | `IN`   | A = in port | Z |
 | D2 | `SHL`  | C ← A ← 0 | Z, C |
 | D3 | `SHR`  | 0 → A → C | Z, C |
@@ -71,6 +71,19 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 Flags that an instruction doesn't list are kept. In particular `LDA` and `ORI` keep `C`, which the shift-and-add examples rely on.
 
 AND, OR and XOR exist only as immediate forms. In version 1 they also had memory forms, which gave up their opcodes to the X and stack instructions.
+
+## Text output
+
+Every `OUT` toggles the OUT_STROBE pin (`uio[5]`), even when the value doesn't change. The RP2040 firmware captures each byte on the strobe edges, and `tools/cpu8load -a prog.bin` prints them as text, the same way `tools/cpu8sim -a prog.bin` does. `programs/lib/print.asm` provides `print` (a string), `print_dec`, `print_hex` and `newline`:
+
+```
+        LDI >msg        ; A = high byte of the address
+        LDX <msg        ; X = low byte
+        CALL print
+        HLT
+        .include "lib/print.asm"
+msg:    .asciz "hello\n"
+```
 
 ## Stack
 
@@ -110,3 +123,4 @@ msg:    .asciz "hi\n"   ; .ascii: without the NUL
 - Expressions support `+ - * / % ( )`, `<x` (low byte), `>x` (x >> 8), and `$` (the current address).
 - Mnemonics and labels are case-insensitive.
 - An immediate can be written with or without a leading `#`.
+- `.include "file"` inserts another source file. The path is relative to the including file.

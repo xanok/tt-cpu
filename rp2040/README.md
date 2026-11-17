@@ -3,7 +3,7 @@
 cpu8 has no memory on the chip. It runs from an SPI RAM, and on the TT demo board the RP2040 plays that RAM. This firmware:
 
 - **core1** runs [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu) by Michael Bell. It emulates a 64 KB 23LC512-style SPI RAM on the project's uio pins. This repo has a modified copy (see below).
-- **core0** runs a USB serial (CDC) command handler. It can select the TT project, load a program into the emulated RAM, drive the project clock, ui_in and rst_n, report uo_out and HALTED, read RAM back, and stream uo_out changes.
+- **core0** runs a USB serial (CDC) command handler. It can select the TT project, load a program into the emulated RAM, drive the project clock, ui_in and rst_n, report uo_out and HALTED, read RAM back, and stream uo_out changes. It also captures every byte the program writes with `OUT` (on the OUT_STROBE pin) and sends it to the host, which is how `cpu8load -a` prints a program's text output.
 
 The PC side is [`../tools/cpu8load.c`](../tools/cpu8load.c).
 
@@ -50,7 +50,7 @@ The map is for the **TT06+ demo board with RP2040**, which was used for TT06, TT
 | uo_out[0..3] / uo_out[4..7] | 5-8 / 13-16 |
 | ui_in[0..3] / ui_in[4..7] | 9-12 / 17-20 |
 | uio[0..7] | 21-28 |
-| cpu8: CS_N, MOSI, MISO, SCK, HALTED | uio0-4 = 21, 22, 23, 24, 25 |
+| cpu8: CS_N, MOSI, MISO, SCK, HALTED, OUT_STROBE | uio0-5 = 21, 22, 23, 24, 25, 26 |
 
 - **TT04/TT05 boards are not supported.** They route rst_n and the mux control lines through an on-board analog mux that is shared with uo_out[0..3].
 - **TT07 chips:** the TT07 carrier board swaps ctrl_sel_inc and ctrl_sel_rst_n. Set `TT07_CB_FIX 1` in `pinmap.h`.
@@ -95,6 +95,11 @@ Every non-empty command line gets **exactly one** final reply: `OK [result]` or 
 - `EV ...`: monitor events, only while `MON 1` is on and the project is out of reset:
   - `EV UO <hex> <us>`: uo_out changed; time in µs since `GO`
   - `EV HALT <us>`: HALTED went high
+- `EV OUT <hexbytes>`: bytes the program wrote with `OUT`, in order. These lines are sent **always** while the project runs, not only with `MON 1`, at up to 64 bytes per line. All bytes captured before a command arrives are sent before that command's reply, so a host that reads `halted=1` in an `ST` reply already has the complete output.
+
+### OUT capture
+
+cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visible. A GPIO interrupt on both edges reads uo_out into a 4 KB ring buffer. It runs at the highest priority, so USB handling can't delay it, and it is a raw `IO_IRQ_BANK0` handler that runs entirely from RAM. An `OUT` takes at least 88 project clocks (8.8 µs at 10 MHz), and uo_out doesn't change until the next one, so the interrupt has time to spare. If the host doesn't read the buffer fast enough and it fills up, bytes are dropped and counted in `ST`'s `lost=` field. `GO` clears the buffer and the counter.
 
 | Command | Reply | Notes |
 |---------|-------|-------|
@@ -124,7 +129,16 @@ The `cpu8load` sequence is: `PING`, [`SYSCLK`], `RST`, `SEL p` or `ATTACH`, `FIL
 cd mock && make test
 ```
 
-`cpu8mock` is the firmware's real `proto.c` linked with `hw_mock.c` on a pseudo-terminal. Its fake CPU does not run cpu8 code. Once out of reset it counts uo_out 1..5 (one step per 20 ms). Then it stores `ui_in ^ 0xFF` at 0xFFE and the 8-bit sum of RAM 0..0xEFF at 0xFFF, and raises HALTED at 100 ms. `test.sh` runs `cpu8load` against it: options, error messages, upload and verify, `-w`, `-m`, `-r`, clock rounding and `SYSCLK`. It also runs raw protocol checks for the error replies. To try it by hand:
+`cpu8mock` is the firmware's real `proto.c` linked with `hw_mock.c` on a pseudo-terminal. Its "chip" is the real cpu8 instruction model (`tools/cpu8core.h`, the same code as `cpu8sim`). It runs the loaded program at the project clock and captures `OUT` like the strobe interrupt does.
+
+`test.sh` runs `cpu8load` against the mock:
+- options, error messages, upload and verify;
+- `-w`, `-m`, `-a`, `-r` and timeouts;
+- clock rounding and `SYSCLK`;
+- every halting example in `programs/`, checking that its `OUT` output through the board path equals `cpu8sim`'s;
+- raw protocol checks for the error replies.
+
+To try it by hand:
 
 ```
 ./cpu8mock -l /tmp/cpu8tty &  ./cpu8load -d /tmp/cpu8tty -p 5 -w -m -r 0xFF0:16 prog.bin

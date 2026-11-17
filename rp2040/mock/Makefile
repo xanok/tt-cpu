@@ -4,8 +4,8 @@ CFLAGS ?= -std=c99 -Wall -Wextra -O2
 
 all: cpu8mock cpu8load
 
-cpu8mock: mock_main.c hw_mock.c ../src/proto.c ../src/proto.h ../src/hw.h
-	$(CC) $(CFLAGS) -I../src -o $@ mock_main.c hw_mock.c ../src/proto.c
+cpu8mock: mock_main.c hw_mock.c ../src/proto.c ../src/proto.h ../src/hw.h ../../tools/cpu8core.h
+	$(CC) $(CFLAGS) -I../src -I../../tools -o $@ mock_main.c hw_mock.c ../src/proto.c
 
 cpu8load: ../../tools/cpu8load.c
 	$(CC) $(CFLAGS) -o $@ $<

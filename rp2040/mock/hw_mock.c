@@ -1,12 +1,11 @@
 // PC mock of hw.h, so the real command parser (../src/proto.c) can be tested
 // without a board. It talks over a pseudo-terminal (see mock_main.c).
 //
-// Instead of cpu8 it has a "fake CPU" with a fixed script, enough to test
-// the loader: after reset is released (with the clock running) it shows
-// 1, 2, 3, 4, 5 on uo_out, one step every 20 ms, then stores
-//   RAM[0x0FFE] = ui_in ^ 0xFF
-//   RAM[0x0FFF] = 8-bit sum of RAM[0x000..0xEFF]   (the loaded program)
-// and raises HALTED at 100 ms.
+// The "chip" is the real cpu8 instruction model (../../tools/cpu8core.h,
+// the same code as cpu8sim). After reset is released it runs the program in
+// RAM[0x000..0xFFF] at the project clock (its clock count follows the RTL),
+// so a program takes as long as it would on the board. Every OUT goes into
+// the OUT capture buffer, like the strobe interrupt on the RP2040.
 
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
@@ -15,6 +14,7 @@
 #include <unistd.h>
 
 #include "hw.h"
+#include "cpu8core.h"
 
 static uint8_t ram[RAM_SIZE];
 uint8_t *hw_ram = ram;
@@ -27,6 +27,11 @@ static uint32_t clk_hz;
 static uint8_t ui, uo;
 static bool attached, in_reset = true, halted;
 static uint64_t t_run;  // when reset was released
+static struct cpu cpu;  // the simulated chip
+
+#define OUT_BUF 4096u
+static uint8_t out_buf[OUT_BUF];
+static uint32_t out_head, out_tail, out_lost;
 
 void hw_puts(const char *s)
 {
@@ -69,6 +74,7 @@ void hw_reset(bool hold)
         halted = false;
     } else if (in_reset) {
         t_run = hw_time_us();
+        memset(&cpu, 0, sizeof cpu);  // cpu8 reset: all registers 0
     }
     in_reset = hold;
 }
@@ -97,17 +103,42 @@ void mock_cpu_update(void)
 {
     if (in_reset || halted || clk_hz == 0 || !attached)
         return;
-    uint64_t ms = (hw_time_us() - t_run) / 1000u;
-    uo = (uint8_t)(ms / 20 < 5 ? ms / 20 + 1 : 5);
-    if (ms >= 100) {
-        uint8_t sum = 0;
-        for (unsigned i = 0; i < 0xF00; i++)
-            sum = (uint8_t)(sum + ram[i]);
-        ram[0x0FFE] = (uint8_t)(ui ^ 0xFF);
-        ram[0x0FFF] = sum;
-        halted = true;
+    // Run until the CPU's clock count catches up with wall-clock time.
+    uint64_t due = (hw_time_us() - t_run) * clk_hz / 1000000u;
+    if (cpu.clocks >= due)
+        return;
+    memcpy(cpu.mem, ram, CPU8_MEM_SIZE);
+    cpu.in = ui;
+    while (!cpu.halted && cpu.clocks < due) {
+        int out = step(&cpu);
+        if (out >= 0) {
+            uo = (uint8_t)out;
+            if (out_head - out_tail < OUT_BUF)
+                out_buf[out_head++ & (OUT_BUF - 1)] = (uint8_t)out;
+            else
+                out_lost++;
+        }
     }
+    memcpy(ram, cpu.mem, CPU8_MEM_SIZE);
+    halted = cpu.halted;
 }
+
+unsigned hw_out_read(uint8_t *buf, unsigned max)
+{
+    mock_cpu_update();
+    unsigned n = 0;
+    while (n < max && out_tail != out_head)
+        buf[n++] = out_buf[out_tail++ & (OUT_BUF - 1)];
+    return n;
+}
+
+void hw_out_clear(void)
+{
+    out_tail = out_head;
+    out_lost = 0;
+}
+
+uint32_t hw_out_lost(void) { return out_lost; }
 
 uint8_t hw_get_uo(void)
 {

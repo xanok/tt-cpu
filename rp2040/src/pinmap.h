@@ -28,6 +28,9 @@
 // ui_in[0..7] and uo_out[0..7] are not on consecutive GPIOs.
 #define PINS_UI  { 9, 10, 11, 12, 17, 18, 19, 20 }
 #define PINS_UO  { 5,  6,  7,  8, 13, 14, 15, 16 }
+// uo_out from a gpio_get_all() value, without a table lookup (used in the
+// OUT strobe interrupt). Must match PINS_UO; hw_pico.c checks it at start.
+#define UO_FROM_GPIO(all)  ((uint8_t)((((all) >> 5) & 0x0Fu) | (((all) >> 9) & 0xF0u)))
 
 // uio[n] = GPIO 21 + n
 #define PIN_UIO(n)          (21 + (n))
@@ -38,6 +41,7 @@
 #define PIN_SPI_MISO        PIN_UIO(2)  // RP2040 -> chip
 #define PIN_SPI_SCK         PIN_UIO(3)  // chip -> RP2040
 #define PIN_HALTED          PIN_UIO(4)  // chip -> RP2040
+#define PIN_OUT_STROBE      PIN_UIO(5)  // chip -> RP2040, toggles on every OUT
 
 // For reference, TT DB v3 (RP2350B, GPIOMapTTDBv3, current firmware):
 //   clk 16, rst_n 14, ctrl_ena 0, ctrl_sel_rst_n 1, ctrl_sel_inc 2,

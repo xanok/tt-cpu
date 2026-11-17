@@ -15,6 +15,7 @@
  *   msg:    .asciz "hi\n"   ; string + NUL (.ascii: no NUL)
  *           .space 16       ; 16 zero bytes (.space n, fill)
  *           .align 2
+ *           .include "lib/print.asm"   ; relative to this file
  *
  * Expressions: + - * / % ( ), unary -, <x (low byte), >x (x >> 8),
  * '$' = address of the current statement.
@@ -27,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "cpu8isa.h"
 
@@ -519,6 +521,64 @@ static char *read_file(const char *path)
     return buf;
 }
 
+/* ---------------- source loading (.include) ---------------- */
+
+static char *lines[MAX_LINES];
+static const char *line_file[MAX_LINES];
+static int line_num[MAX_LINES];
+static int nlines;
+
+/* Read a file into the line list, expanding .include "file" (relative to
+ * the including file's directory). */
+static void load_file(const char *path, int depth)
+{
+    if (depth > 8)
+        fail("includes nested too deeply");
+    char *text = read_file(path);
+    int n = 0;
+    for (char *p = text; *p;) {
+        char *nl = strchr(p, '\n');
+        if (nl) {
+            *nl = 0;
+            if (nl > p && nl[-1] == '\r')
+                nl[-1] = 0;
+        }
+        n++;
+        char *q = p;
+        while (isspace((unsigned char)*q))
+            q++;
+        if (strncasecmp(q, ".include", 8) == 0 && isspace((unsigned char)q[8])) {
+            char *a = strchr(q, '"'), *b = a ? strchr(a + 1, '"') : NULL;
+            src_name = path;
+            line_no = n;
+            if (!a || !b)
+                fail(".include needs a quoted file name");
+            *b = 0;
+            const char *slash = strrchr(path, '/');
+            size_t dir = slash ? (size_t)(slash - path + 1) : 0;
+            char *inc = malloc(dir + strlen(a + 1) + 1);
+            if (!inc)
+                fail("out of memory");
+            if (a[1] == '/')
+                strcpy(inc, a + 1);
+            else {
+                memcpy(inc, path, dir);
+                strcpy(inc + dir, a + 1);
+            }
+            load_file(inc, depth + 1);
+        } else {
+            if (nlines == MAX_LINES)
+                fail("too many lines");
+            line_file[nlines] = path;
+            line_num[nlines] = n;
+            lines[nlines++] = p;
+        }
+        if (!nl)
+            break;
+        p = nl + 1;
+    }
+}
+
 static void usage(void)
 {
     fprintf(stderr,
@@ -558,19 +618,7 @@ int main(int argc, char **argv)
     if (strcmp(fmt, "bin") && strcmp(fmt, "hex"))
         usage();
 
-    char *text = read_file(src_name);
-    static char *lines[MAX_LINES];
-    int nlines = 0;
-    for (char *p = text; *p && nlines < MAX_LINES;) {
-        lines[nlines++] = p;
-        char *nl = strchr(p, '\n');
-        if (!nl)
-            break;
-        *nl = 0;
-        if (nl > p && nl[-1] == '\r')
-            nl[-1] = 0;
-        p = nl + 1;
-    }
+    load_file(src_name, 0);
 
     if (list && !(listing = fopen(list, "w"))) {
         perror(list);
@@ -581,7 +629,8 @@ int main(int argc, char **argv)
     for (pass = 1; pass <= 2; pass++) {
         pc = 0;
         for (int l = 0; l < nlines; l++) {
-            line_no = l + 1;
+            src_name = line_file[l];
+            line_no = line_num[l];
             if (strlen(lines[l]) >= sizeof buf)
                 fail("line too long");
             strcpy(buf, lines[l]);
@@ -616,6 +665,6 @@ int main(int argc, char **argv)
     }
     if (top > CPU8_STACK_PAGE)
         fprintf(stderr, "%s: warning: program uses 0x%03X-0x%03X, which is also the stack page\n",
-                src_name, CPU8_STACK_PAGE, top - 1);
+                argv[i], CPU8_STACK_PAGE, top - 1);
     return 0;
 }

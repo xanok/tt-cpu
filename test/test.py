@@ -372,3 +372,22 @@ depth:  .byte 0
 """)
     await run_to_halt(dut, max_cycles=2_000_000)
     assert u(dut.uo_out) == 100
+
+
+@cocotb.test()
+async def test_out_strobe(dut):
+    """OUT_STROBE (uio[5]) toggles on every OUT, also when the value repeats,
+    and is an output; HALTED (uio[4]) too."""
+    await boot(dut, "LDI 'a'\nOUT\nOUT\nOUT\nLDI 'b'\nOUT\nHLT")
+    assert (u(dut.uio_oe) >> 4) & 0b11 == 0b11
+    toggles, last = 0, (u(dut.uio_out) >> 5) & 1
+    for _ in range(5000):
+        await RisingEdge(dut.clk)
+        s = (u(dut.uio_out) >> 5) & 1
+        if s != last:
+            toggles += 1
+            last = s
+        if (u(dut.uio_out) >> HALTED) & 1:
+            break
+    assert toggles == 4
+    assert u(dut.uo_out) == ord("b")

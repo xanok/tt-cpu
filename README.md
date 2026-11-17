@@ -8,7 +8,7 @@ src/            chip RTL (only these go to tapeout)
   cpu.v           the CPU core + SPI master
 model/          SPI RAM model: testbench memory AND on-FPGA block RAM
 tools/          C tools: cpu8asm (assembler), cpu8sim (simulator), cpu8load (RP2040 loader)
-programs/       21 example programs + run_tests.sh
+programs/       22 example programs, lib/print.asm (text output), run_tests.sh
 rp2040/         RP2040 firmware: SPI RAM emulator + USB loader
 test/           cocotb tests (TT CI runs these)
 fpga/           Tang Nano 20K top, pin constraints, Makefile
@@ -23,6 +23,7 @@ Toolchain: `source ~/tools/oss-cad-suite/environment`
 | Assemble | `tools/cpu8asm -o prog.bin -l prog.lst prog.asm` |
 | Simulate | `tools/cpu8sim -s prog.bin` (`-a` text output, `-t` trace, `-i` input, `-d addr:len` dump) |
 | Test the examples in the simulator | `programs/run_tests.sh` |
+| Run on the demo board (RP2040 firmware in `rp2040/`) | `tools/cpu8load -a prog.bin` (text output), `-n` (numbers), `-r addr:len` (dump RAM) |
 | Run tests (RTL, incl. every example vs the simulator) | `cd test && make` (waveform in `test/tb.fst`: `gtkwave tb.fst`) |
 | Build FPGA bitstream | `cd fpga && make` (or `make PROG=../programs/other.asm`) |
 | Flash to SRAM (temporary) | `cd fpga && make flash` |

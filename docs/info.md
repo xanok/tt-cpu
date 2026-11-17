@@ -10,7 +10,7 @@ You can also include images in this folder and reference them in the markdown. E
 
 cpu8 is a tiny 8-bit CPU with an accumulator, an index register X and a stack (CALL/RET/PUSH/POP). It has no memory on chip. Every instruction and every data byte is read from (or written to) an external SPI RAM, in 23LC512 style: mode 0, READ 0x03 / WRITE 0x02, 16-bit address. Instructions are 2 bytes each. The address space is 4 KB, and the stack is its top 256 bytes.
 
-`ui_in` is an 8-bit input port, read with `IN`. `uo_out` is an 8-bit output port, written with `OUT`. `uio[4]` goes high after a `HLT`. See [isa.md](isa.md) for the instruction set.
+`ui_in` is an 8-bit input port, read with `IN`. `uo_out` is an 8-bit output port, written with `OUT`. `uio[4]` goes high after a `HLT`. `uio[5]` (OUT_STROBE) toggles on every `OUT`, so the demo board's RP2040 can capture each output byte, repeated values included, and pass it to the PC as text. See [isa.md](isa.md) for the instruction set.
 
 ## How to test
 
