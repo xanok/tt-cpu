@@ -28,6 +28,23 @@ Tools: `source ~/tools/oss-cad-suite/environment`, and `make -C ../tools` for th
 
 Harden the design first, then copy `runs/wokwi/final/pnl/tt_um_xanok_cpu8.pnl.v` to `gate_level_netlist.v` in this folder. For the timing simulation, take the SDF file from `runs/wokwi/final/sdf/<corner>/` of the same run.
 
+## Timing simulation results
+
+Run on 2026-11-17 on a local GF180 hardening of commit c322d99 (LibreLane 3.0.14), not on the layout GitHub builds. Every run is all of `test.py` plus all 25 example programs.
+
+| Corner | Clock | MISO_RISE low | MISO_RISE high |
+|--------|-------|---------------|----------------|
+| slow (`max_ss_125C_3v00`) | 10 MHz | pass | pass |
+| slow (`max_ss_125C_3v00`) | 25 MHz | pass | pass |
+| typical (`nom_tt_025C_3v30`) | 10 MHz | pass | not run |
+| fast (`min_ff_n40C_3v60`) | 10 MHz | pass | not run |
+| fast (`min_ff_n40C_3v60`) | 25 MHz | pass | not run |
+
+- The same netlist without delays passes in both MISO_RISE settings.
+- At 50 MHz in the slow corner the tests fail, as they should: the delays are really applied.
+- Icarus Verilog ignores the setup and hold checks in the SDF file. A path that is too slow shows up as a wrong result in a test, not as a timing message. This simulation adds to the timing report of the hardening run; it does not replace it.
+- `test_unused_state_recovers` is skipped on the gate-level netlist: it forces the state register, and the netlist has no signal with that name.
+
 ## Waveform
 
 Every run writes `tb.fst`.
