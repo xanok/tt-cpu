@@ -31,8 +31,8 @@ build/tr_rise/trace: trace.cpp $(RTL)
 	verilator $(VFL) -DMISO_RISE -CFLAGS -DMISO_RISE trace.cpp --Mdir build/tr_rise -o trace $(RTL) > build/tr_rise.log 2>&1 || (cat build/tr_rise.log; false)
 
 firmware:
-	cmake -S .. -B ../build -DPICO_SDK_PATH=$(HOME)/tools/pico-sdk -DPICOTOOL_FETCH_FROM_GIT_PATH=$(HOME)/tools/picotool > /dev/null
-	cmake --build ../build -j8 --target emu_test emu_test_stock | grep -iE "warning|error" || true
+	cmake -S .. -B ../build_rp2040 -DTT_BOARD=rp2040 -DPICO_SDK_PATH=$(HOME)/tools/pico-sdk -DPICOTOOL_FETCH_FROM_GIT_PATH=$(HOME)/tools/picotool > /dev/null
+	cmake --build ../build_rp2040 -j8 --target emu_test emu_test_stock | grep -iE "warning|error" || true
 
 test: setup
 	./run.sh test $(JOBS)

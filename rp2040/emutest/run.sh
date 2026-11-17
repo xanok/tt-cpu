@@ -28,7 +28,7 @@ if [ "$mode" = test ]; then
     fails=0
     for n in "${names[@]}"; do for m in fall rise; do echo "$n $m"; done; done |
     xargs -P "$jobs" -L 1 bash -c '
-        r=$(node replay.mjs ../build/emu_test.bin build/prog/$0.bin build/prog/$0.$1.txt build/prog/$0.$1.final 2>&1 | grep -v "not implemented\|Unimplemented")
+        r=$(node replay.mjs ../build_rp2040/emu_test.bin build/prog/$0.bin build/prog/$0.$1.txt build/prog/$0.$1.final 2>&1 | grep -v "not implemented\|Unimplemented")
         printf "%-12s strap %s  %s\n" "$0" "$([ $1 = fall ] && echo 0 || echo 1)" "$r"' | sort > build/test.out
     cat build/test.out
     fails=$(grep -c -v " ok " build/test.out)
@@ -48,7 +48,7 @@ else
         done | sort -u -k1,1n -k2,2n | xargs -P "$jobs" -L 1 bash -c '
             ok=1
             for n in '"$progs"'; do
-                node replay.mjs ../build/'"$1"'.bin build/prog/$n.bin build/prog/$n.'"$2"'.txt build/prog/$n.'"$2"'.final --ratio $0 --delay $1 > /dev/null 2>&1 || ok=0
+                node replay.mjs ../build_rp2040/'"$1"'.bin build/prog/$n.bin build/prog/$n.'"$2"'.txt build/prog/$n.'"$2"'.final --ratio $0 --delay $1 > /dev/null 2>&1 || ok=0
             done
             echo "$0 $1 $ok"' | sort -k1,1nr -k2,2n |
         awk '{ if ($1 != r) { if (r) print line; r = $1; line = sprintf("  ratio %2d:", r) } line = line sprintf("  d=%-2d %s", $2, $3 ? "ok  " : "FAIL") } END { print line }'

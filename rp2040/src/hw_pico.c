@@ -1,4 +1,5 @@
-// RP2040 side of hw.h: TT demo board pins, project clock (PWM) and mux.
+// RP2040 / RP2350 side of hw.h: TT demo board pins, project clock (PWM) and
+// mux. The board is chosen in pinmap.h.
 
 #include <stdio.h>
 
@@ -6,6 +7,7 @@
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/structs/io_bank0.h"
+#include "hardware/structs/sio.h"
 #include "hardware/sync.h"
 #include "hardware/pwm.h"
 #include "hardware/vreg.h"
@@ -58,7 +60,7 @@ static void __not_in_flash_func(strobe_irq)(void)
 {
     // acknowledge both edge events of the strobe pin (write-1-to-clear)
     io_bank0_hw->intr[PIN_OUT_STROBE / 8] = 0xCu << (4 * (PIN_OUT_STROBE % 8));
-    uint8_t v = UO_FROM_GPIO(gpio_get_all());
+    uint8_t v = UO_READ_FAST();
     uint32_t h = out_head;
     if (h - out_tail < OUT_BUF) {
         out_buf[h & (OUT_BUF - 1)] = v;
@@ -110,7 +112,7 @@ void hw_init(void)
     // uio0..3 (SPI) are set up by setup_simulated_sram().
 
     for (int i = 0; i < 8; i++)  // UO_FROM_GPIO must agree with PINS_UO
-        if (UO_FROM_GPIO(1u << pins_uo[i]) != (1u << i))
+        if (UO_FROM_GPIO((gpio_all_t)1 << pins_uo[i]) != (1u << i))
             panic("pinmap.h: UO_FROM_GPIO does not match PINS_UO");
     gpio_set_irq_enabled(PIN_OUT_STROBE, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true);
     irq_set_exclusive_handler(IO_IRQ_BANK0, strobe_irq);
@@ -217,9 +219,16 @@ bool hw_set_sysclk(uint32_t khz)
     uint vco, pd1, pd2;
     if (!check_sys_clock_khz(khz, &vco, &pd1, &pd2))
         return false;
-    // 1.15 V is what the SDK uses for 200 MHz; above that is overclocking.
     // Raise the voltage before speeding up, lower it after slowing down.
+#if PICO_RP2040
+    // 1.15 V is what the SDK uses for 200 MHz; above that is overclocking.
     enum vreg_voltage v = khz > 200000 ? VREG_VOLTAGE_1_20 : VREG_VOLTAGE_1_15;
+#else
+    // RP2350: 1.10 V is the default and covers the rated 150 MHz; anything
+    // faster is overclocking and gets more voltage.
+    enum vreg_voltage v = khz > 200000 ? VREG_VOLTAGE_1_20 :
+                          khz > 150000 ? VREG_VOLTAGE_1_15 : VREG_VOLTAGE_1_10;
+#endif
     if (khz * 1000ull > clock_get_hz(clk_sys)) {
         vreg_set_voltage(v);
         sleep_ms(2);
@@ -243,12 +252,7 @@ void hw_set_ui(uint8_t v)
 
 uint8_t hw_get_uo(void)
 {
-    uint32_t all = gpio_get_all();
-    uint8_t v = 0;
-    for (int i = 0; i < 8; i++)
-        if (all & (1u << pins_uo[i]))
-            v |= (uint8_t)(1u << i);
-    return v;
+    return UO_FROM_GPIO(GPIO_GET_ALL());
 }
 
 bool hw_get_halted(void) { return gpio_get(PIN_HALTED); }

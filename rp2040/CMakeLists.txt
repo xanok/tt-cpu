@@ -1,7 +1,21 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Build: cmake -B build -DPICO_SDK_PATH=~/tools/pico-sdk && cmake --build build
-set(PICO_BOARD tt_demo_rp2040 CACHE STRING "Board type")
+# Build for the current demo board (RP2350B, the default):
+#   cmake -B build -DPICO_SDK_PATH=~/tools/pico-sdk && cmake --build build
+# Build for the older RP2040 demo board (also used by emutest/):
+#   cmake -B build_rp2040 -DTT_BOARD=rp2040 -DPICO_SDK_PATH=~/tools/pico-sdk
+set(TT_BOARD rp2350 CACHE STRING "Demo board: rp2350 (TT DB v3 / ETR) or rp2040 (TT06+)")
+if (TT_BOARD STREQUAL "rp2350")
+    set(PICO_BOARD tt_demo_rp2350 CACHE STRING "Board type")
+    set(TT_BOARD_DEF TT_BOARD_RP2350)
+elseif (TT_BOARD STREQUAL "rp2040")
+    set(PICO_BOARD tt_demo_rp2040 CACHE STRING "Board type")
+    # 200 MHz system clock (officially supported by RP2040; the SDK raises the
+    # core voltage to 1.15 V for it). Gives the spi-ram-emu timing more margin.
+    set(TT_BOARD_DEF TT_BOARD_RP2040 SYS_CLK_MHZ=200)
+else()
+    message(FATAL_ERROR "TT_BOARD must be rp2350 or rp2040")
+endif()
 set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/boards)
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)  # spi-ram-emu timing needs optimised code
@@ -21,9 +35,7 @@ add_executable(${NAME}
 )
 target_include_directories(${NAME} PRIVATE src spi-ram-emu)
 target_compile_options(${NAME} PRIVATE -Wall -Wextra)
-# 200 MHz system clock (officially supported by RP2040; the SDK raises the
-# core voltage to 1.15 V for it). Needed for the spi-ram-emu timing margin.
-target_compile_definitions(${NAME} PRIVATE SYS_CLK_MHZ=200)
+target_compile_definitions(${NAME} PRIVATE ${TT_BOARD_DEF})
 target_link_libraries(${NAME}
     pico_stdlib
     pico_multicore
@@ -51,7 +63,7 @@ add_executable(emu_test
 )
 target_include_directories(emu_test PRIVATE src spi-ram-emu)
 target_compile_options(emu_test PRIVATE -Wall -Wextra)
-target_compile_definitions(emu_test PRIVATE PIN_READY=25)
+target_compile_definitions(emu_test PRIVATE PIN_READY=25 ${TT_BOARD_DEF})
 target_link_libraries(emu_test
     pico_stdlib
     pico_multicore_headers
@@ -92,7 +104,7 @@ add_executable(emu_test_stock
     spi-ram-emu/sram.c
 )
 target_include_directories(emu_test_stock PRIVATE src spi-ram-emu)
-target_compile_definitions(emu_test_stock PRIVATE PIN_READY=25)
+target_compile_definitions(emu_test_stock PRIVATE PIN_READY=25 ${TT_BOARD_DEF})
 target_link_libraries(emu_test_stock
     pico_stdlib
     pico_multicore_headers

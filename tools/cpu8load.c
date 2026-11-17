@@ -1,7 +1,7 @@
 /*
  * cpu8load - load and run a cpu8 program on the Tiny Tapeout demo board.
  *
- * Talks to the RP2040 firmware in ../rp2040 (protocol: rp2040/README.md)
+ * Talks to the demo board firmware in ../rp2040 (protocol: rp2040/README.md)
  * over its USB serial port. Plain C99 + POSIX, no other libraries:
  *
  *   gcc -std=c99 -Wall -Wextra -O2 -o cpu8load cpu8load.c
@@ -356,7 +356,8 @@ static void usage(FILE *f)
 "             the currently selected project is used\n"
 "  -f HZ      project clock in Hz (default 10000000)\n"
 "  -i VAL     value for ui_in, the CPU's IN port (default 0)\n"
-"  -s KHZ     set the RP2040 system clock first (default: firmware's 200000)\n"
+"  -s KHZ     set the board microcontroller's system clock first (default:\n"
+"             the firmware's own, 150000 on the RP2350 board, 200000 on RP2040)\n"
 "  -e 0|1     MISO_RISE strap: the CPU samples MISO at the end of the SCK\n"
 "             high phase (0, default) or at the SCK rising edge (1)\n"
 "  -w         wait until the CPU executes HLT (HALTED pin high)\n"
@@ -456,7 +457,7 @@ int main(int argc, char **argv)
     char reply[300];
     if (sysclk) {
         command(reply, sizeof reply, REPLY_MS, "SYSCLK %lu", sysclk);
-        fprintf(info, "RP2040 clock: %s\n", reply);
+        fprintf(info, "board clock: %s\n", reply);
     }
     command(NULL, 0, REPLY_MS, "RST");
     if (project >= 0) {

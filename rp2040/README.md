@@ -1,6 +1,13 @@
 # cpu8 loader firmware for the Tiny Tapeout demo board
 
-cpu8 has no memory on the chip. It runs from an SPI RAM, and on the TT demo board the RP2040 plays that RAM. This firmware:
+cpu8 has no memory on the chip. It runs from an SPI RAM, and on the TT demo board the board's microcontroller plays that RAM. The firmware builds for two boards:
+
+- **RP2350B** (the default): the current "TT DB v3" / ETR demo board, which the GF180 shuttles ship with.
+- **RP2040:** the older TT06+ demo board.
+
+The folder is still called `rp2040/`, and the text below says "RP2040" where both chips behave the same. **The RP2350 build has not run anywhere yet:** not on a board, and not in an emulator (rp2040js only models the RP2040). The RP2040 build is checked in rp2040js (`emutest/`).
+
+This firmware:
 
 - **core1** runs [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu) by Michael Bell. It emulates a 64 KB 23LC512-style SPI RAM on the project's uio pins. This repo has a modified copy (see below).
 - **core0** runs a USB serial (CDC) command handler. It can select the TT project, load a program into the emulated RAM, drive the project clock, ui_in and rst_n, report uo_out and HALTED, read RAM back, and stream uo_out changes. It also captures every byte the program writes with `OUT` (on the OUT_STROBE pin) and sends it to the host, which is how `cpu8load -a` prints a program's text output.
@@ -18,10 +25,10 @@ cpu8load -p <project address> -w -m -r 0x800:32 prog.bin
 | `src/pinmap.h` | Demo board GPIO map. All pin numbers live here. |
 | `src/proto.c`, `proto.h` | Command parser in plain C. It is also compiled on the PC for the mock. |
 | `src/hw.h` | Hardware interface the parser calls |
-| `src/hw_pico.c` | RP2040 code for it: pins, PWM clock, project mux |
+| `src/hw_pico.c` | RP2040 / RP2350 code for it: pins, PWM clock, project mux |
 | `src/main.c` | Starts spi-ram-emu and USB, then loops over commands |
 | `spi-ram-emu/` | Modified copy of `sram.c/.h/.pio` (BSD-3, see `LICENSE`), plus pico-sdk 2.x linker overrides in `ld/` |
-| `boards/tt_demo_rp2040.h` | Board header: Pico settings with a slower flash clock, for 200 MHz |
+| `boards/tt_demo_rp2350.h`, `boards/tt_demo_rp2040.h` | Board headers for the two demo boards |
 | `mock/` | PC mock (the real parser plus fake hardware on a pty) and `test.sh` |
 
 ## Build
@@ -30,8 +37,15 @@ You need an ARM GCC and pico-sdk 2.x with the tinyusb submodule. On this machine
 
 ```
 export PATH=~/tools/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin:$PATH
-cmake -B build -DPICO_SDK_PATH=$HOME/tools/pico-sdk -DPICOTOOL_FETCH_FROM_GIT_PATH=$HOME/tools/picotool
-cmake --build build -j8          # -> build/cpu8_loader.uf2
+SDK="-DPICO_SDK_PATH=$HOME/tools/pico-sdk -DPICOTOOL_FETCH_FROM_GIT_PATH=$HOME/tools/picotool"
+
+# current demo board (RP2350B), the default
+cmake -B build_rp2350 $SDK
+cmake --build build_rp2350 -j8 --target cpu8_loader    # -> build_rp2350/cpu8_loader.uf2
+
+# older demo board (RP2040)
+cmake -B build_rp2040 -DTT_BOARD=rp2040 $SDK
+cmake --build build_rp2040 -j8 --target cpu8_loader    # -> build_rp2040/cpu8_loader.uf2
 ```
 
 Toolchain setup used: xPack arm-none-eabi-gcc 15.2.1-1.1 (tarball unpacked into `~/tools`). pico-sdk 2.3.1 is a git clone in `~/tools/pico-sdk`, with `git submodule update --init lib/tinyusb`. On the first configure, the SDK fetches and builds picotool into `~/tools/picotool`.
@@ -40,21 +54,23 @@ Toolchain setup used: xPack arm-none-eabi-gcc 15.2.1-1.1 (tarball unpacked into 
 
 ## Board and pin map
 
-The map is for the **TT06+ demo board with RP2040**, which was used for TT06, TT07, TT08 and later RP2040 shuttles. It comes from `GPIOMapTT06` in [tt-micropython-firmware](https://github.com/TinyTapeout/tt-micropython-firmware) `src/ttboard/pins/gpio_map.py`, in the last version before commit `37cf3e8` (2026-01-27, "Exclusive RP2350/ETR DB support: previous RP2040 support withdrawn").
+Both maps come from [tt-micropython-firmware](https://github.com/TinyTapeout/tt-micropython-firmware): `GPIOMapTTDBv3` in `src/ttboard/pins/gpio_map_dbv3.py` (commit `15ba5ce`) for the RP2350 board, and `GPIOMapTT06` in the last version before commit `37cf3e8` (2026-01-27, "Exclusive RP2350/ETR DB support: previous RP2040 support withdrawn") for the RP2040 board.
 
-| Signal | RP2040 GPIO |
-|--------|-------------|
-| project clk | 0 (PWM slice 0 A) |
-| project rst_n | 1 |
-| ctrl_sel_rst_n / ctrl_sel_inc / ctrl_ena | 2 / 3 / 4 |
-| uo_out[0..3] / uo_out[4..7] | 5-8 / 13-16 |
-| ui_in[0..3] / ui_in[4..7] | 9-12 / 17-20 |
-| uio[0..7] | 21-28 |
-| cpu8: CS_N, MOSI, MISO, SCK, HALTED, OUT_STROBE, MISO_RISE | uio0-6 = 21, 22, 23, 24, 25, 26, 27 |
+| Signal | RP2350B board (TT DB v3) | RP2040 board (TT06+) |
+|--------|--------------------------|----------------------|
+| project clk (PWM) | 16 | 0 |
+| project rst_n | 14 | 1 |
+| ctrl_ena / ctrl_sel_rst_n / ctrl_sel_inc | 0 / 1 / 2 | 4 / 2 / 3 |
+| ui_in[0..7] | 17-24 | 9-12, 17-20 |
+| uio[0..7] | 25-32 | 21-28 |
+| uo_out[0..7] | 33-40 | 5-8, 13-16 |
+| cpu8: CS_N, MOSI, MISO, SCK, HALTED, OUT_STROBE, MISO_RISE (uio0-6) | 25-31 | 21-27 |
 
+- **RP2350 board:** uo_out is on GPIO 33-40, in the chip's high GPIO bank, so it is read through the 64-bit GPIO functions. The SPI pins are below 32, so the PIO programs need no GPIO base change. The board's other pins (manual clock button 15, analog current source 12, management pins 3-10) are left as inputs.
+- **RP2350 clock:** the firmware runs the RP2350 at its rated 150 MHz, so the chip clock limit (sys/10) is 15 MHz and the 10 MHz default leaves 120 system clocks for the re-arm described below, against 160 on the RP2040 at 200 MHz. `SYSCLK 200000` (`cpu8load -s 200000`) raises it; that is overclocking, at 1.15 V.
 - **TT04/TT05 boards are not supported.** They route rst_n and the mux control lines through an on-board analog mux that is shared with uo_out[0..3].
 - **TT07 chips:** the TT07 carrier board swaps ctrl_sel_inc and ctrl_sel_rst_n. Set `TT07_CB_FIX 1` in `pinmap.h`.
-- **Newer boards use an RP2350, not an RP2040.** The current "TT DB v3" / ETR demo board has an RP2350B, and since January 2026 the official firmware supports only that board. Its map is in a comment at the end of `pinmap.h`: clk 16, rst_n 14, ctrl 0/1/2, ui_in 17-24, uio 25-32, uo_out 33-40. The relative uio layout is the same, so the PIO changes below still apply. The port itself is not done. It needs `PICO_PLATFORM=rp2350`, its own memory map for the emulated RAM, and uo_out read from the high GPIO bank. **Check which board your shuttle ships with.** A future shuttle will most likely come with DB v3.
+- **A Pico 2 is not the demo board.** It has the smaller RP2350A without GPIO 30-47, so a bench test with one needs a third pin map, which is not written yet.
 
 **Project selection** copies `ProjectMux.reset_and_clock_mux()` from the TT firmware:
 1. Set ctrl_ena=0 and ctrl_sel_rst_n=0, wait 10 ms.
@@ -85,7 +101,7 @@ In simulation (`test/`, `make MISO_RISE=yes`) all tests pass with stock timing a
 
 ## Timing limits (read this before choosing a clock)
 
-- **Clock limit:** the firmware rejects a chip clock above sys/10, which is 20 MHz at the default 200 MHz system clock. The limit comes from the CS re-arm time below, not from SCK: spi-ram-emu READ works up to SCK = sys/10 and cpu8 uses SCK = clk/2, which alone would allow sys/5. The firmware runs the RP2040 at 200 MHz (`SYS_CLK_MHZ=200`, core at 1.15 V, flash at sys/4).
+- **Clock limit:** the firmware rejects a chip clock above sys/10, which is 20 MHz on the RP2040 board (200 MHz system clock) and 15 MHz on the RP2350 board (150 MHz). The limit comes from the CS re-arm time below, not from SCK: spi-ram-emu READ works up to SCK = sys/10 and cpu8 uses SCK = clk/2, which alone would allow sys/5. The RP2040 build runs at 200 MHz (`SYS_CLK_MHZ=200`, core at 1.15 V, flash at sys/4); the RP2350 build at its default 150 MHz.
 - **CS re-arm time.** After CS goes high, core1 has to abort the DMA and restart both state machines before the next transaction's first SCK edge. The core1 re-arm path is about 40 instructions in the disassembly, roughly 50–65 cycles, plus input synchronisers and DMA abort latency. Michael Bell's README also estimates "around 50 SYS clocks". At 200 MHz that is about 300 ns.
   - cpu8 used to keep CS high for only 1–2 clocks, too short at 10 MHz. `src/cpu.v` now holds CS high for **at least 8 clocks** between transactions (`CS_GAP`): 800 ns at 10 MHz, or about 160 RP2040 clocks at 200 MHz. That leaves a good margin, so 10 MHz is the default.
   - In the rp2040js replay test (`emutest/`) the re-arm takes about 80 system clocks, and the emulator works at 10 system clocks per chip clock and fails at 8. So the 10 MHz default has a factor of two in hand. rp2040js counts CPU cycles only approximately, so this is indicative.
@@ -124,7 +140,7 @@ cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visib
 | `FILL addr len val` | `OK` | for example `FILL 0 4096 0` |
 | `PUT hex` | `OK <accepted> <free>` | queue input bytes for the program (see "Input mailbox"). Takes as many as fit in the 256-byte queue; send the rest again later. `ERR` in reset |
 | `MON 0/1` | `OK` | uo_out/HALT event streaming |
-| `SYSCLK khz` | `OK sys=<Hz> clk=<Hz>` | 50000..250000. Holds reset, then sets the clock up again if it still fits. Uses 1.20 V above 200 MHz |
+| `SYSCLK khz` | `OK sys=<Hz> clk=<Hz>` | 50000..250000. Holds reset, then sets the clock up again if it still fits. Raises the core voltage for speeds above the chip's rating |
 | `HELP` | `# ...` lines, then `OK` | |
 | `BOOT` | `OK` | then reboots into the UF2 bootloader |
 

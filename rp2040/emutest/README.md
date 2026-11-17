@@ -10,6 +10,8 @@ make sweep     # clock ratio x pad delay table
 
 Needs Node.js, the OSS CAD Suite (Verilator), the ARM compiler and the pico-sdk, at the paths in the Makefile.
 
+The test uses the **RP2040 build** of the firmware (`-DTT_BOARD=rp2040`, in `../build_rp2040`), because rp2040js only models the RP2040. The emulator's `sram.c` and `sram.pio` are the same source for the RP2350 build, but that build is not exercised here.
+
 ## How it works
 
 1. **Record.** `trace` runs a program on the chip's Verilog (Verilator, with the ideal RAM model) and writes one line per chip clock: CS, SCK and MOSI, and for every clock edge where the chip samples a READ data bit, the value it must see on MISO. It also saves the memory at `HLT`.

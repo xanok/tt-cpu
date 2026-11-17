@@ -20,6 +20,8 @@ tools/cpu8asm
 tools/cpu8sim
 tools/cpu8load
 rp2040/build/
+rp2040/build_rp2040/
+rp2040/build_rp2350/
 test/fuzz/build/
 test/fuzz/coverage/
 test/fuzz/*.log

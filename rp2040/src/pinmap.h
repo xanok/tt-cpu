@@ -1,26 +1,49 @@
-// RP2040 GPIO map of the Tiny Tapeout demo board. Change pins here only.
+// GPIO map of the Tiny Tapeout demo board. Change pins here only.
 //
-// Board: TT06+ demo board (RP2040). It was used with TT06, TT07, TT08 and the
-// later RP2040 shuttles. Source: tt-micropython-firmware, class GPIOMapTT06
-// in src/ttboard/pins/gpio_map.py (last RP2040 version, the parent of commit
-// 37cf3e8 "Exclusive RP2350/ETR DB support: previous RP2040 support
-// withdrawn", 2026-01-27).
+// Two boards are supported; CMake picks one (-DTT_BOARD=rp2350 or rp2040):
 //
-// NOT for the TT04/TT05 demo board: that one shares the mux control lines
-// with uo_out[1..3] through an on-board analog mux (GPIOMapTT04).
+// TT_BOARD_RP2350 (default): the current "TT DB v3" / ETR demo board with an
+//   RP2350B, the one the GF180 shuttles ship with. Source: class
+//   GPIOMapTTDBv3 in tt-micropython-firmware,
+//   src/ttboard/pins/gpio_map_dbv3.py (commit 15ba5ce).
 //
-// NOT for the newer "TT DB v3" / ETR demo board: it has an RP2350B, not an
-// RP2040. Its map (GPIOMapTTDBv3) is listed at the bottom for reference.
+// TT_BOARD_RP2040: the TT06+ demo board with an RP2040 (TT06, TT07, TT08 and
+//   the later RP2040 shuttles). Source: class GPIOMapTT06 in the last RP2040
+//   version of that firmware. NOT the TT04/TT05 board, which shares the mux
+//   control lines with uo_out[1..3].
+//
+// On both boards uio[0..7] are consecutive GPIOs below 32, so the SPI RAM
+// emulator's PIO programs (CS = MOSI - 1, SCK = MOSI + 2) fit unchanged.
 #pragma once
+
+#if defined(TT_BOARD_RP2350)
+
+#define PIN_PROJ_CLK        16  // project clk (PWM)
+#define PIN_PROJ_RST_N      14  // project rst_n (board has a pull-up and a button)
+#define PIN_CTRL_ENA        0   // project mux control (select a project by address)
+#define PIN_CTRL_SEL_RST_N  1
+#define PIN_CTRL_SEL_INC    2
+#define TT07_CB_FIX         0
+
+#define PINS_UI  { 17, 18, 19, 20, 21, 22, 23, 24 }
+#define PINS_UO  { 33, 34, 35, 36, 37, 38, 39, 40 }   // in the high GPIO bank
+// uo_out from a 64-bit gpio_get_all64() value
+#define UO_FROM_GPIO(all)  ((uint8_t)((all) >> 33))
+// uo_out read directly, for the OUT strobe interrupt: GPIO 32..47 are bits
+// 0..15 of the high input register
+#define UO_READ_FAST()     ((uint8_t)(sio_hw->gpio_hi_in >> 1))
+#define GPIO_GET_ALL()     gpio_get_all64()
+typedef uint64_t gpio_all_t;
+
+#define PIN_UIO(n)          (25 + (n))
+
+#elif defined(TT_BOARD_RP2040)
 
 #define PIN_PROJ_CLK        0   // project clk (PWM slice 0, channel A)
 #define PIN_PROJ_RST_N      1   // project rst_n (board has a pull-up and a button)
-
-// Project mux control (select a project by address)
-#define PIN_CTRL_SEL_RST_N  2
+#define PIN_CTRL_SEL_RST_N  2   // project mux control (select a project by address)
 #define PIN_CTRL_SEL_INC    3
 #define PIN_CTRL_ENA        4
-
 // The TT07 carrier board swapped ctrl_sel_rst_n and ctrl_sel_inc. Set this
 // to 1 only for a TT07 chip.
 #define TT07_CB_FIX         0
@@ -28,27 +51,23 @@
 // ui_in[0..7] and uo_out[0..7] are not on consecutive GPIOs.
 #define PINS_UI  { 9, 10, 11, 12, 17, 18, 19, 20 }
 #define PINS_UO  { 5,  6,  7,  8, 13, 14, 15, 16 }
-// uo_out from a gpio_get_all() value, without a table lookup (used in the
-// OUT strobe interrupt). Must match PINS_UO; hw_pico.c checks it at start.
+// uo_out from a gpio_get_all() value, without a table lookup
 #define UO_FROM_GPIO(all)  ((uint8_t)((((all) >> 5) & 0x0Fu) | (((all) >> 9) & 0xF0u)))
+#define UO_READ_FAST()     UO_FROM_GPIO(gpio_get_all())
+#define GPIO_GET_ALL()     gpio_get_all()
+typedef uint32_t gpio_all_t;
 
-// uio[n] = GPIO 21 + n
 #define PIN_UIO(n)          (21 + (n))
 
-// cpu8 use of the uio pins (see ../../src/project.v)
-#define PIN_SPI_CS_N        PIN_UIO(0)  // chip -> RP2040
-#define PIN_SPI_MOSI        PIN_UIO(1)  // chip -> RP2040
-#define PIN_SPI_MISO        PIN_UIO(2)  // RP2040 -> chip
-#define PIN_SPI_SCK         PIN_UIO(3)  // chip -> RP2040
-#define PIN_HALTED          PIN_UIO(4)  // chip -> RP2040
-#define PIN_OUT_STROBE      PIN_UIO(5)  // chip -> RP2040, toggles on every OUT
-#define PIN_MISO_RISE       PIN_UIO(6)  // RP2040 -> chip, strap: MISO sample edge
+#else
+#error "define TT_BOARD_RP2350 or TT_BOARD_RP2040 (CMake: -DTT_BOARD=rp2350|rp2040)"
+#endif
 
-// For reference, TT DB v3 (RP2350B, GPIOMapTTDBv3, current firmware):
-//   clk 16, rst_n 14, ctrl_ena 0, ctrl_sel_rst_n 1, ctrl_sel_inc 2,
-//   ui_in 17..24, uio 25..32, uo_out 33..40, manual clock button 15.
-// The relative uio layout is the same (CS=uio0 ... SCK=uio3), so the
-// modified spi-ram-emu PIO programs would still fit, but the RP2350 build
-// also needs PICO_PLATFORM=rp2350, a different memory map for the emulated
-// RAM (0x20030000 is ordinary striped SRAM there) and reading uo_out from
-// the high GPIO bank (pins >= 32). That port is not done.
+// cpu8 use of the uio pins (see ../../src/project.v), same on both boards
+#define PIN_SPI_CS_N        PIN_UIO(0)  // chip -> RP2
+#define PIN_SPI_MOSI        PIN_UIO(1)  // chip -> RP2
+#define PIN_SPI_MISO        PIN_UIO(2)  // RP2 -> chip
+#define PIN_SPI_SCK         PIN_UIO(3)  // chip -> RP2
+#define PIN_HALTED          PIN_UIO(4)  // chip -> RP2
+#define PIN_OUT_STROBE      PIN_UIO(5)  // chip -> RP2, toggles on every OUT
+#define PIN_MISO_RISE       PIN_UIO(6)  // RP2 -> chip, strap: MISO sample edge
