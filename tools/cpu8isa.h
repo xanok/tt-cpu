@@ -38,6 +38,7 @@ static const struct cpu8_op cpu8_ops[] = {
     {"LDI", 0x00, K_IMM}, {"ADI", 0x01, K_IMM}, {"SBI", 0x02, K_IMM},
     {"ANI", 0x03, K_IMM}, {"ORI", 0x04, K_IMM}, {"XRI", 0x05, K_IMM},
     {"CPI", 0x06, K_IMM}, {"LDX", 0x07, K_IMM}, {"CPX", 0x08, K_IMM},
+    {"ADC", 0x09, K_IMM}, {"SBC", 0x0A, K_IMM},
     /* 12-bit address */
     {"LDA", 0x1, K_ADDR}, {"STA", 0x2, K_ADDR}, {"ADD", 0x3, K_ADDR},
     {"SUB", 0x4, K_ADDR},

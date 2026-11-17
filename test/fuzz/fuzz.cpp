@@ -89,7 +89,7 @@ static void make_program(unsigned char *m, int mode)
         unsigned r = rnd_n(100), ea = pick_addr(), imm = rnd_n(4) ? rnd() & 0xFF : (rnd_n(2) ? 0 : 0xFF);
         static const unsigned mem_ops[] = {1, 2, 3, 4, 5, 6, 7, 0xE};
         if (r < 22) {                                   // immediate group
-            put_instr(m, at, rnd_n(10) ? rnd_n(9) : rnd_n(16), imm);
+            put_instr(m, at, rnd_n(10) ? rnd_n(11) : rnd_n(16), imm);
         } else if (r < 52) {                            // memory access
             put_instr(m, at, mem_ops[rnd_n(8)] << 4 | ea >> 8, ea);
         } else if (r < 60) {                            // CALL forward / anywhere in code

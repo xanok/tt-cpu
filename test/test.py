@@ -294,6 +294,70 @@ r2:     .byte 0
 
 
 @cocotb.test()
+async def test_adc_sbc(dut):
+    """ADC / SBC: carry in, carry out, borrow in, borrow out, Z."""
+    await boot(dut, """
+        LDI 0xFF
+        ADI 1           ; A=0, C=1
+        ADC 5           ; 0+5+1 = 6, C=0
+        STA r0
+        ADC 5           ; 6+5+0 = 11
+        STA r1
+        LDI 0xFF
+        ADI 1           ; C=1
+        LDI 0xFF        ; LDI keeps C
+        ADC 0           ; 0xFF+0+1 = 0, C=1, Z=1
+        JNZ fail
+        JC  c1
+        JMP fail
+c1:     STA r2
+        ADC 0xFF        ; 0+0xFF+1 = 0x100: A=0, C=1
+        JNZ fail
+        JC  c2
+        JMP fail
+c2:     LDI 10
+        SBC 3           ; 10-3-1 = 6, C=0
+        JC  fail
+        STA r3
+        SBC 3           ; 6-3-0 = 3
+        STA r4
+        SBI 4           ; 3-4 = 0xFF, C=1
+        LDI 0
+        SBC 0           ; 0-0-1 = 0xFF, C=1
+        JC  c3
+        JMP fail
+c3:     STA r5
+        LDI 1
+        SBC 0           ; 1-0-1 = 0, C=0, Z=1
+        JNZ fail
+        JC  fail
+        SBI 1           ; C=1
+        LDI 0
+        SBC 0xFF        ; 0-0xFF-1 = -0x100: A=0, C=1
+        JNZ fail
+        JC  c4
+        JMP fail
+c4:     LDI 0x5A
+        OUT
+        HLT
+fail:   LDI 0xEE
+        OUT
+        HLT
+        .org 0x200
+r0:     .byte 0
+r1:     .byte 0
+r2:     .byte 0xAA
+r3:     .byte 0
+r4:     .byte 0
+r5:     .byte 0
+""")
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 0x5A
+    base = 0x200
+    assert [mem(dut, base + i) for i in range(6)] == [6, 11, 0, 6, 3, 0xFF]
+
+
+@cocotb.test()
 async def test_index_register(dut):
     """Copy a table with LDA ea,X / STA ea,X, sum it with ADD ea,X."""
     await boot(dut, """

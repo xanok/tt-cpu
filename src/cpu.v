@@ -38,7 +38,7 @@ module cpu8 (
   // immediate group (op 0), selected by hi
   localparam I_LDI = 4'h0, I_ADI = 4'h1, I_SBI = 4'h2, I_ANI = 4'h3,
              I_ORI = 4'h4, I_XRI = 4'h5, I_CPI = 4'h6, I_LDX = 4'h7,
-             I_CPX = 4'h8;
+             I_CPX = 4'h8, I_ADC = 4'h9, I_SBC = 4'hA;
 
   // misc group (op D), selected by hi
   localparam M_OUT = 4'h0, M_IN  = 4'h1, M_SHL = 4'h2, M_SHR = 4'h3,
@@ -123,8 +123,8 @@ module cpu8 (
   always @* begin
     case (op)
       OP_IMM: case (hi)
-        I_ADI:        fn = 3'd1;
-        I_SBI, I_CPI, I_CPX: fn = 3'd2;
+        I_ADI, I_ADC: fn = 3'd1;
+        I_SBI, I_CPI, I_CPX, I_SBC: fn = 3'd2;
         I_ANI:        fn = 3'd3;
         I_ORI:        fn = 3'd4;
         I_XRI:        fn = 3'd5;
@@ -138,11 +138,13 @@ module cpu8 (
 
   wire [7:0] lhs = (op == OP_IMM && hi == I_CPX) ? x : a;
   wire [7:0] b   = (state == S_MWAIT) ? rx[7:0] : arg;
+  // ADC / SBC also add or subtract the carry flag (carry in / borrow in)
+  wire       cin = cf && (op == OP_IMM) && (hi == I_ADC || hi == I_SBC);
   reg  [8:0] alu;  // {carry, result}
   always @* begin
     case (fn)
-      3'd1:    alu = {1'b0, lhs} + {1'b0, b};
-      3'd2:    alu = {1'b0, lhs} - {1'b0, b};  // carry = borrow
+      3'd1:    alu = {1'b0, lhs} + {1'b0, b} + {8'd0, cin};
+      3'd2:    alu = {1'b0, lhs} - {1'b0, b} - {8'd0, cin};  // carry = borrow
       3'd3:    alu = {cf, lhs & b};
       3'd4:    alu = {cf, lhs | b};
       3'd5:    alu = {cf, lhs ^ b};
@@ -225,7 +227,7 @@ module cpu8 (
           state <= S_FETCH;
           case (op)
             OP_IMM: case (hi)
-              I_LDI, I_ADI, I_SBI, I_ANI, I_ORI, I_XRI: begin
+              I_LDI, I_ADI, I_SBI, I_ANI, I_ORI, I_XRI, I_ADC, I_SBC: begin
                 a  <= alu[7:0];
                 cf <= alu[8];
                 zf <= alu_z;

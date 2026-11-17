@@ -47,7 +47,9 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 | 06 | `CPI imm` | flags of A − imm | Z, C |
 | 07 | `LDX imm` | X = imm | Z |
 | 08 | `CPX imm` | flags of X − imm | Z, C |
-| 09–0F | reserved | does nothing | – |
+| 09 | `ADC imm` | A = A + imm + C (add with carry) | Z, C = carry |
+| 0A | `SBC imm` | A = A − imm − C (subtract with borrow) | Z, C = borrow |
+| 0B–0F | reserved | does nothing | – |
 
 ### Misc group (op D, operand byte ignored)
 
@@ -69,6 +71,8 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 | DD–DF | `NOP` | nothing | – |
 
 Flags that an instruction doesn't list are kept. In particular `LDA` and `ORI` keep `C`, which the shift-and-add examples rely on.
+
+`ADC` and `SBC` are for arithmetic wider than 8 bits. Because `LDA` keeps `C`, the high byte of a 16-bit add is `LDA a_hi` / `ADC 0` / `ADD b_hi`, with no branch (see `programs/add16.asm`). The carry out of that pair is only the carry of the last `ADD`, so a third byte would still need a branch.
 
 AND, OR and XOR exist only as immediate forms. In version 1 they also had memory forms, which gave up their opcodes to the X and stack instructions.
 

@@ -65,6 +65,8 @@ static inline int step(struct cpu *s)
         case 0x6: s->c = s->a < lo; set_z(s, (unsigned char)(s->a - lo)); break; /* CPI */
         case 0x7: s->x = lo; set_z(s, s->x); break;                         /* LDX */
         case 0x8: s->c = s->x < lo; set_z(s, (unsigned char)(s->x - lo)); break; /* CPX */
+        case 0x9: r = s->a + lo + s->c; s->c = r > 0xFF; s->a = r; set_z(s, s->a); break; /* ADC */
+        case 0xA: r = s->a - lo - s->c; s->c = (r >> 8) & 1; s->a = r; set_z(s, s->a); break; /* SBC */
         default: break;                                                     /* reserved */
         }
         break;
