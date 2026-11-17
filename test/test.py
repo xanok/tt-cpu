@@ -2,13 +2,16 @@
 """cocotb tests for cpu8. Each test assembles a small program, loads it into
 the SPI RAM model, runs until HLT and checks outputs / memory."""
 
+import os
+
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge
+from cocotb.triggers import ClockCycles, RisingEdge, Timer
 
 from cpu8tools import assemble
 
 HALTED = 4  # uio_out bit
+GATES = os.environ.get("GATES") == "yes"  # running on the gate-level netlist
 
 
 def u(sig):
@@ -152,6 +155,52 @@ async def test_input_port(dut):
     await boot(dut, "IN\nADI 1\nOUT\nHLT", ui=0x41)
     await run_to_halt(dut)
     assert u(dut.uo_out) == 0x42
+
+
+@cocotb.test()
+async def test_input_port_changes(dut):
+    """IN reads the pins through the synchroniser: a new value is seen by the
+    next IN, also when the pins change away from a clock edge."""
+    await boot(dut, """
+loop:   IN
+        OUT
+        CPI 0x99
+        JNZ loop
+        HLT
+""", ui=0x11)
+    seen = []
+    for value in (0x22, 0x7E, 0x99):
+        await ClockCycles(dut.clk, 700)
+        seen.append(u(dut.uo_out))
+        await Timer(37, unit="ns")      # not aligned with the clock
+        dut.ui_in.value = value
+    await run_to_halt(dut)
+    assert seen == [0x11, 0x22, 0x7E]
+    assert u(dut.uo_out) == 0x99
+
+
+@cocotb.test(skip=GATES)
+async def test_unused_state_recovers(dut):
+    """Unused state codes 6 and 7 go back to fetching (source only: the
+    netlist has no signal called state)."""
+    for code in (6, 7):
+        await boot(dut, """
+        LDI 0
+loop:   ADI 1
+        OUT
+        CPI 50
+        JNZ loop
+        HLT
+""")
+        state = dut.user_project.core.state
+        await ClockCycles(dut.clk, 3000)
+        while state.value.to_unsigned() != 1:   # S_FWAIT: nothing executed yet
+            await RisingEdge(dut.clk)
+        state.value = code
+        await ClockCycles(dut.clk, 1)
+        assert state.value.to_unsigned() == code
+        await run_to_halt(dut)
+        assert u(dut.uo_out) == 50
 
 
 @cocotb.test()

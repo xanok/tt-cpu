@@ -62,7 +62,21 @@ module cpu8 (
   always @(posedge clk) rst_sync <= {rst_sync[0], rst_n};
   wire        rst_ni = rst_sync[1];
 
+  // Keep this binary encoding: the synthesiser would otherwise re-encode the
+  // state as one flip-flop per state and drop the recovery from unused codes
+  // (the "default" at the end of the state machine).
+  (* fsm_encoding = "none" *)
   reg  [2:0]  state;
+
+  // ---------------- input port synchroniser ----------------
+  // The input pins have no timing relation to clk. Two flip-flops per pin,
+  // so IN never samples a pin while it is changing. IN sees the pins 2
+  // clocks late. No reset needed.
+  reg  [7:0]  in_meta, in_sync;
+  always @(posedge clk) begin
+    in_meta <= in_port;
+    in_sync <= in_meta;
+  end
   reg  [11:0] pc;
   reg  [7:0]  a, sp;
   reg  [11:0] x;       // index register: a full address
@@ -272,7 +286,7 @@ module cpu8 (
             OP_JNZ: if (!zf) pc <= ea;
             OP_MSC: case (hi)
               M_OUT: begin out_port <= a; out_strobe <= ~out_strobe; end
-              M_IN:  begin a <= in_port; zf <= (in_port == 8'd0); end
+              M_IN:  begin a <= in_sync; zf <= (in_sync == 8'd0); end
               M_SHL: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end
               M_SHR: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end
               M_NOT: begin a <= ~a; zf <= (a == 8'hFF); end
@@ -317,7 +331,16 @@ module cpu8 (
           end
         end
 
-        default: ;  // S_HALT: stay until reset
+        S_HALT: ;  // stay until reset
+
+        // Unused state codes (6, 7) cannot be reached by the logic. If a
+        // disturbance ever puts the CPU there, end any open SPI transaction
+        // and go back to fetching instead of hanging until reset.
+        default: if (!busy) begin
+          spi_cs_n <= 1'b1;
+          gap      <= CS_GAP;
+          state    <= S_FETCH;
+        end
       endcase
     end
   end
