@@ -3,6 +3,7 @@ on: [push, workflow_dispatch]
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15  # a stuck job is stopped here, not at GitHub's 6-hour default
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6

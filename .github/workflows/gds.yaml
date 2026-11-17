@@ -7,6 +7,7 @@ on:
 jobs:
   gds:
     runs-on: ubuntu-24.04
+    timeout-minutes: 40  # a stuck job is stopped here, not at GitHub's 6-hour default
     steps:
       - name: checkout repo
         uses: actions/checkout@v6
@@ -21,6 +22,7 @@ jobs:
   precheck:
     needs: gds
     runs-on: ubuntu-24.04
+    timeout-minutes: 20  # a stuck job is stopped here, not at GitHub's 6-hour default
     steps:
       - name: Run Tiny Tapeout Precheck
         uses: TinyTapeout/tt-gds-action/precheck@ttsky26d
@@ -28,6 +30,7 @@ jobs:
   gl_test:
     needs: gds
     runs-on: ubuntu-24.04
+    timeout-minutes: 15  # a stuck job is stopped here, not at GitHub's 6-hour default
     steps:
       - name: checkout repo
         uses: actions/checkout@v6
@@ -40,6 +43,7 @@ jobs:
   viewer:
     needs: gds
     runs-on: ubuntu-24.04
+    timeout-minutes: 10  # a stuck job is stopped here, not at GitHub's 6-hour default
     permissions:
       pages: write      # to deploy to Pages
       id-token: write   # to verify the deployment originates from an appropriate source

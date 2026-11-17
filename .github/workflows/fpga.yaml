@@ -9,6 +9,7 @@ on:
 jobs:
   fpga:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20  # a stuck job is stopped here, not at GitHub's 6-hour default
     steps:
       - name: checkout repo
         uses: actions/checkout@v6

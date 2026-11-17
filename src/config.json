@@ -15,8 +15,12 @@
   "//": "Users have reported that values up to 80 worked well for them.",
   "PL_TARGET_DENSITY_PCT": 60,
 
-  "//": "SYNTH_STRATEGY - the design fills the 1x1 tile (82% utilization). With the default (AREA 0)",
-  "//": "the detailed router does not converge; AREA 2 and AREA 1 route cleanly, AREA 3 does not.",
+  "//": "The design fills the 1x1 tile (82% utilization), so routing is tight. Two settings help:",
+  "//": "FP_MACRO_*_HALO - keep-out for cells around the logo macro. The default of 10 um wastes 4.6% of the",
+  "//": "tile; the logo is met4 only, so 2 um is enough. With 2 um, AREA 0, 1 and 2 all route cleanly.",
+  "//": "SYNTH_STRATEGY - with the 10 um halo only AREA 1 and 2 routed; AREA 2 converges fastest.",
+  "FP_MACRO_HORIZONTAL_HALO": 2,
+  "FP_MACRO_VERTICAL_HALO": 2,
   "SYNTH_STRATEGY": "AREA 2",
 
   "//": "CLOCK_PERIOD - Increase this in case you are getting setup time violations.",
