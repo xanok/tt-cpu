@@ -62,6 +62,8 @@ jobs:
 
       - name: Install OSS CAD Suite (Verilator)
         uses: YosysHQ/setup-oss-cad-suite@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}  # without it the download hits GitHub's anonymous rate limit
 
       - name: Random-program test
         run: make -C test/fuzz N=300
