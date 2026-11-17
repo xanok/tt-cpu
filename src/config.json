@@ -17,7 +17,7 @@
 
   "//": "GF180: the resizer otherwise uses delay cells (dlyb_1, 4-5 ns each in the slow corner) as",
   "//": "ordinary fan-out buffers, and timing then fails even at 20 MHz. Without them the design closes",
-  "//": "timing at CLOCK_PERIOD 40 in every corner (worst setup slack +3.6 ns) at 68% utilization.",
+  "//": "timing at CLOCK_PERIOD 40 in every corner (worst setup slack +0.7 ns) at 80% utilization.",
   "EXTRA_EXCLUDED_CELLS": ["gf180mcu_fd_sc_mcu7t5v0__dly*"],
 
   "//": "CLOCK_PERIOD - Increase this in case you are getting setup time violations.",

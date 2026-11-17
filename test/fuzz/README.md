@@ -11,10 +11,10 @@ build/fall/fuzz -p prog.bin -v    # one program from a file, with a trace
 
 Programs come in three kinds, in turn: every byte random; weighted valid instructions with addresses biased towards the stack page, the ends of memory and the code itself; and the second kind with random bytes mixed in. A failing program is saved as `fail_s<seed>_p<n>.bin`.
 
-Results (2026-11-17, commit 7100f2a):
+Results:
 
-- 48,000 programs, 58.5 million instructions, 145,568 random resets, both sampling modes: no mismatch.
-- Of 12 bugs injected into copies of `cpu.v`, 11 were caught; the twelfth was an equivalent rewrite, not a bug.
-- Coverage of `src/cpu.v` from these programs plus the examples: every line, branch and signal toggles, except the `miso_rise` strap (static by design) and one `default:` that no opcode can reach.
+- Current design (2026-11-17, with ADC/SBC, the 12-bit X, the input synchroniser and the reset that needs no clock): 6,000 programs, 7.1 million instructions, 17,256 random resets, both sampling modes: no mismatch.
+- Coverage of `src/cpu.v` from these programs plus the examples: every line that does something, except the recovery from the unused state codes 6 and 7. No program can reach those; `test_unused_state_recovers` in `test/test.py` forces them.
+- Earlier, at commit 7100f2a: 48,000 programs, 58.5 million instructions, 145,568 random resets: no mismatch. Of 12 bugs injected into copies of `cpu.v`, 11 were caught; the twelfth was an equivalent rewrite, not a bug. Neither has been repeated on the current design.
 
-Limits: the RAM model is 4 KB, so addresses past 0xFFF wrap as in the simulator; on a 64 KB RAM a fetch at 0xFFF or a `STRLEN` running off the end reads 0x1000 instead. The test needs Verilator (in the OSS CAD Suite) and is not part of the GitHub workflow.
+Limits: the RAM model is 4 KB, so addresses past 0xFFF wrap as in the simulator; on a 64 KB RAM a fetch at 0xFFF or a `STRLEN` running off the end reads 0x1000 instead. The test needs Verilator (in the OSS CAD Suite). GitHub's `fuzz` job (in `.github/workflows/test.yaml`) runs a short version, 300 programs in each mode, on every push; the long runs are done by hand.

@@ -17,15 +17,15 @@
 
 module cpu8 (
     input  wire       clk,
-    input  wire       rst_n,       // asynchronous; synchronised below
+    input  wire       rst_n,       // asynchronous; its release is synchronised below
     input  wire       miso_rise,   // static strap: 0 = sample MISO at the end of the SCK high
                                    // phase, 1 = sample at the SCK rising edge
     input  wire [7:0] in_port,
-    output reg  [7:0] out_port,
-    output reg        out_strobe,  // toggles on every OUT (byte-ready for the host)
+    output wire [7:0] out_port,
+    output wire       out_strobe,  // toggles on every OUT (byte-ready for the host)
     output wire       halted,
-    output reg        spi_cs_n,
-    output reg        spi_sck,
+    output wire       spi_cs_n,
+    output wire       spi_sck,
     output wire       spi_mosi,
     input  wire       spi_miso
 );
@@ -53,13 +53,22 @@ module cpu8 (
              S_HALT  = 3'd4,
              S_STRL  = 3'd5;  // STRLEN: stream bytes until NUL
 
-  // ---------------- reset synchroniser ----------------
-  // rst_n has no timing relation to clk. Without this, flip-flops could
-  // leave reset on different clocks (seen in simulation: the first
-  // instruction is skipped). Reset now starts and ends 2 clocks late, the
-  // same for every flip-flop. These two flip-flops have no reset themselves.
+  // ---------------- reset ----------------
+  // rst_n has no timing relation to clk. Two flip-flops bring it in:
+  // - Reset starts at once and needs no clock: rst_n low clears these two
+  //   flip-flops directly, and rst_ni low forces every output pin to its
+  //   reset value (see "output pins" below): CS high, SCK low, the rest 0.
+  // - Reset ends in step with the clock, 2 clocks after rst_n goes high, the
+  //   same for every flip-flop. Without this, flip-flops could leave reset
+  //   on different clocks (seen in simulation: the first instruction is
+  //   skipped).
+  // All other flip-flops are reset by rst_ni at a clock edge. They always get
+  // one: rst_ni stays low for 2 clocks after rst_n, however short the pulse.
   reg  [1:0]  rst_sync;
-  always @(posedge clk) rst_sync <= {rst_sync[0], rst_n};
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) rst_sync <= 2'b00;
+    else        rst_sync <= {rst_sync[0], 1'b1};
+  end
   wire        rst_ni = rst_sync[1];
 
   // Keep this binary encoding: the synthesiser would otherwise re-encode the
@@ -129,8 +138,18 @@ module cpu8 (
   reg  [5:0]  lastbit; // index of last bit in this transaction
   reg         busy;
 
-  assign spi_mosi = tx[39];
-  assign halted   = (state == S_HALT);
+  // ---------------- output pins ----------------
+  // Forced to their reset values while rst_ni is low, so they are right from
+  // the moment rst_n goes low, clock or no clock. When rst_ni goes high again
+  // the flip-flops behind them already hold the same values: no glitch.
+  reg  [7:0]  out_q;
+  reg         strobe_q, cs_q, sck_q;
+  assign out_port   = out_q & {8{rst_ni}};
+  assign out_strobe = strobe_q & rst_ni;
+  assign spi_cs_n   = cs_q | !rst_ni;
+  assign spi_sck    = sck_q & rst_ni;
+  assign spi_mosi   = tx[39] & rst_ni;
+  assign halted     = (state == S_HALT) & rst_ni;
 
   // ---------------- ALU ----------------
   // fn: 0 pass, 1 add, 2 sub, 3 and, 4 or, 5 xor
@@ -187,10 +206,10 @@ module cpu8 (
       cf       <= 1'b0;
       ir       <= 8'd0;
       arg      <= 8'd0;
-      out_port <= 8'd0;
-      out_strobe <= 1'b0;
-      spi_cs_n <= 1'b1;
-      spi_sck  <= 1'b0;
+      out_q    <= 8'd0;
+      strobe_q <= 1'b0;
+      cs_q     <= 1'b1;
+      sck_q    <= 1'b0;
       tx       <= 40'd0;
       gap      <= 3'd0;
       rx       <= 16'd0;
@@ -207,18 +226,18 @@ module cpu8 (
       //     the rising edge (stock spi-ram-emu); also works with the others,
       //     with half an SCK period of setup.
       if (busy) begin
-        if (!spi_sck) begin
-          spi_sck <= 1'b1;
+        if (!sck_q) begin
+          sck_q <= 1'b1;
           if (miso_rise) rx <= {rx[14:0], spi_miso};
         end else begin
-          spi_sck <= 1'b0;
+          sck_q <= 1'b0;
           if (!miso_rise) rx <= {rx[14:0], spi_miso};
           tx      <= {tx[38:0], 1'b0};
           bitcnt  <= bitcnt + 6'd1;
           if (bitcnt == lastbit) begin
             busy <= 1'b0;
             // STRLEN keeps CS low so the RAM keeps streaming sequential bytes
-            if (state != S_STRL) spi_cs_n <= 1'b1;
+            if (state != S_STRL) cs_q <= 1'b1;
             if (state != S_STRL) gap <= CS_GAP;
           end
         end
@@ -231,7 +250,7 @@ module cpu8 (
         lastbit  <= t_two ? 6'd39 : 6'd31;  // 24 header bits + 2 or 1 data bytes
         bitcnt   <= 6'd0;
         busy     <= 1'b1;
-        spi_cs_n <= 1'b0;
+        cs_q <= 1'b0;
       end
 
       if (!stall) case (state)
@@ -285,7 +304,7 @@ module cpu8 (
             OP_JC:  if (cf)  pc <= ea;
             OP_JNZ: if (!zf) pc <= ea;
             OP_MSC: case (hi)
-              M_OUT: begin out_port <= a; out_strobe <= ~out_strobe; end
+              M_OUT: begin out_q <= a; strobe_q <= ~strobe_q; end
               M_IN:  begin a <= in_sync; zf <= (in_sync == 8'd0); end
               M_SHL: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end
               M_SHR: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end
@@ -319,7 +338,7 @@ module cpu8 (
 
         S_STRL: if (!busy) begin
           if (rx[7:0] == 8'd0 || a == 8'hFF) begin
-            spi_cs_n <= 1'b1;
+            cs_q <= 1'b1;
             gap      <= CS_GAP;
             zf       <= (a == 8'd0);
             cf       <= (rx[7:0] != 8'd0);  // no NUL within 255 bytes
@@ -337,7 +356,7 @@ module cpu8 (
         // disturbance ever puts the CPU there, end any open SPI transaction
         // and go back to fetching instead of hanging until reset.
         default: if (!busy) begin
-          spi_cs_n <= 1'b1;
+          cs_q <= 1'b1;
           gap      <= CS_GAP;
           state    <= S_FETCH;
         end

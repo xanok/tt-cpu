@@ -80,7 +80,7 @@ Both maps come from [tt-micropython-firmware](https://github.com/TinyTapeout/tt-
 
 Selection takes about 20 ms + 2 ms × addr. Your project address is in the shuttle's project list (TT index / `info.yaml` of the shuttle repo).
 
-**Reset:** rst_n is driven low to reset. To release it, the firmware drives it high briefly and then makes the pin an input, so the board's pull-up and reset button work as with the TT firmware. cpu8's reset is synchronous, so `GO` keeps reset low for at least 1 ms with the clock running.
+**Reset:** rst_n is driven low to reset. To release it, the firmware drives it high briefly and then makes the pin an input, so the board's pull-up and reset button work as with the TT firmware. cpu8's reset starts without a clock, but it ends in step with the clock, so `GO` keeps reset low for at least 1 ms with the clock running.
 
 **ui_in:** the RP2040 drives ui_in only after `SEL` or `ATTACH`. Set the demo board's ui_in DIP switches to OFF so they do not fight the RP2040. Please check this against your board's schematic.
 

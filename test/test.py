@@ -24,12 +24,13 @@ async def boot(dut, src, ui=0):
     image = assemble(src)
     for i, byte in enumerate(image):  # whole 4 KB: clears leftovers from earlier tests
         dut.ram.mem[i].value = byte
-    cocotb.start_soon(Clock(dut.clk, CLK_NS, unit="ns").start())  # 10 MHz
+    clock = cocotb.start_soon(Clock(dut.clk, CLK_NS, unit="ns").start())  # 10 MHz
     dut.ena.value = 1
     dut.ui_in.value = ui
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 5)
     dut.rst_n.value = 1
+    return clock
 
 
 async def run_to_halt(dut, max_cycles=200_000):
@@ -605,3 +606,43 @@ v:      .byte 0
     await run_to_halt(dut)
     assert u(dut.uo_out) == 0x12
     assert mem(dut, 0xFFE) == 0x00 and mem(dut, 0xFFF) == 0x06  # one CALL, SP reset
+
+
+@cocotb.test()
+async def test_reset_without_clock(dut):
+    """Reset needs no clock: with the clock stopped in the middle of an SPI
+    transaction, rst_n low alone puts every output in its reset state."""
+    clock = await boot(dut, """
+        LDI 0x5A
+        OUT
+        LDA v
+        OUT
+        HLT
+v:      .byte 0x33
+""")
+    for _ in range(2000):  # until the first OUT is done and a transaction is under way
+        await RisingEdge(dut.clk)
+        uio = u(dut.uio_out)
+        if u(dut.uo_out) == 0x5A and (uio & 0b0001) == 0:
+            break
+    else:
+        raise AssertionError("no SPI transaction after the first OUT")
+    await ClockCycles(dut.clk, 20)  # well into the transaction
+    clock.cancel()  # the clock stops here, with CS low
+    await Timer(30, unit="ns")
+    assert u(dut.uo_out) == 0x5A and (u(dut.uio_out) & 0b0001) == 0
+
+    dut.rst_n.value = 0
+    await Timer(100, unit="ns")  # no clock edge in here
+    uio = u(dut.uio_out)
+    assert (uio & 0b0001) == 0b0001, "CS must be high"
+    assert (uio & 0b1000) == 0, "SCK must be low"
+    assert (uio & 0b110000) == 0, "HALTED and OUT_STROBE must be low"
+    assert u(dut.uo_out) == 0
+
+    # Clock back on, reset released: the program runs from the start
+    cocotb.start_soon(Clock(dut.clk, CLK_NS, unit="ns").start())
+    await ClockCycles(dut.clk, 3)
+    dut.rst_n.value = 1
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 0x33

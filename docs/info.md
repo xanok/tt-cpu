@@ -17,15 +17,13 @@ cpu8 is a tiny 8-bit CPU with an accumulator, a 12-bit index register X and a st
 - **0:** at the end of the SCK high phase. Use this with a RAM that changes MISO after the falling SCK edge: a real 23LC512, or the modified spi-ram-emu in `rp2040/`.
 - **1:** at the SCK rising edge, like a standard SPI mode-0 master. Use this with the stock spi-ram-emu, which changes MISO right after the rising edge.
 
-`rst_n` is synchronised inside the chip, so it can be released at any time. Reset takes effect 2 clocks after the pin changes; hold it low for at least 4 clocks.
+Reset starts as soon as `rst_n` goes low and needs no clock: the SPI pins go to their idle state (CS high, SCK low), `uo_out` to 0. Its release is synchronised inside the chip, so `rst_n` can go high at any time; the CPU starts 2 clocks later.
 
 ## How to test
 
 1. Put the firmware from this repository's `rp2040/` folder on the demo board's microcontroller (it builds for the RP2350B board and for the older RP2040 board). It emulates the SPI RAM (a modified copy of [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu)) on uio[0] CS#, uio[1] MOSI, uio[2] MISO and uio[3] SCK, and drives the MISO_RISE strap on uio[6]. The unmodified spi-ram-emu does not fit this pin order.
 2. Assemble a program (`tools/cpu8asm -o prog.bin prog.asm`) and run `tools/cpu8load -p <project address> -a prog.bin`. It holds the design in reset, copies the program into the emulated RAM at address 0, sets the clock to 10 MHz (SCK = 5 MHz, well under the emulator's 12.5 MHz READ limit) and releases reset.
 3. The program's `OUT` bytes are printed as text. `uo_out` also shows on the 7-segment display, and the HALTED pin goes high at `HLT`.
-
-Reset is synchronous inside the chip: the clock must be running while `rst_n` is low.
 
 ## External hardware
 

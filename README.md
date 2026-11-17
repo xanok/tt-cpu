@@ -46,7 +46,7 @@ programs/       25 example programs, lib/print.asm and lib/input.asm, run_tests.
 rp2040/         demo board firmware (RP2350B and RP2040): SPI RAM emulator + USB loader; mock/ tests it on a PC
 test/           cocotb tests (TT CI runs these)
 fpga/           Tang Nano 20K top, UART in/out, pin constraints, Makefile
-docs/           isa.md, io.md, info.md
+docs/           isa.md, io.md, info.md, bench.md
 ```
 
 ## Commands
@@ -70,7 +70,7 @@ Toolchain for the Verilog tests and the FPGA: `source ~/tools/oss-cad-suite/envi
 | Examples in the simulator | `programs/run_tests.sh` |
 | Chip Verilog, including every example against the simulator | `cd test && make` (waveform: `gtkwave tb.fst`) |
 | Same, with the MISO_RISE strap high and stock spi-ram-emu RAM timing | `cd test && make MISO_RISE=yes` |
-| Random programs on the Verilog against the instruction model, both sampling modes | `cd test/fuzz && make` (`N=20000 SEED=7` for more; `make coverage` for line/toggle coverage) |
+| Random programs on the Verilog against the instruction model, both sampling modes | `cd test/fuzz && make` (`N=20000 SEED=7` for more; `make coverage` for line/toggle coverage; GitHub's `fuzz` job runs `N=300`) |
 | Same tests and every example on the routed gate-level netlist | copy `runs/wokwi/final/pnl/tt_um_xanok_cpu8.pnl.v` from a hardening run to `test/gate_level_netlist.v`, then `cd test && make GATES=yes PDK_ROOT=<pdk>` (add `MISO_RISE=yes` for the other strap setting; GitHub's `gl_test` job does the first) |
 | Same, with cell and wire delays from the layout (timing simulation) | as above, then `cd test && make GATES=yes SDF=<file>.sdf PDK_ROOT=<pdk>`, with the SDF file from `runs/wokwi/final/sdf/<corner>/` of the same hardening run as the netlist (`CLK_NS=40` for the 25 MHz target, default 100 = 10 MHz) |
 | Loader and firmware protocol on the mock demo board | `cd rp2040/mock && make test` |
@@ -109,9 +109,9 @@ The chip targets **GlobalFoundries GF180MCU** on the Tiny Tapeout shuttle **ttgf
 
 | | GF180 (this branch) |
 |---|---|
-| Utilization | 68% |
+| Utilization | 80% |
 | Clock target | 25 MHz (`CLOCK_PERIOD` 40 ns); the chip is meant to run at 10 MHz |
-| Worst setup / hold slack | +3.6 ns / +0.20 ns over all corners (local run, LibreLane 3.0.14) |
+| Worst setup / hold slack | +0.7 ns / +0.13 ns over all corners (local run, LibreLane 3.0.14) |
 | Special setting | delay cells excluded (`EXTRA_EXCLUDED_CELLS`), see `src/config.json` |
 
 The design was first hardened for SkyWater sky130 (1x1 tile, 82% utilization, shuttle tag `ttsky26d`). That state, with its config and its metal-4 logo macro, is kept as the git tag **`sky130-verified`**. The silicon-art logo is regenerated for GF180 Metal4 (`macros/`, from `art/` with `tools/make_logo.py --pdk gf180mcuD`); the sky130 version of the macro is in the tag.

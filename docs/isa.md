@@ -123,7 +123,7 @@ The memory is 23LC512-style: READ `0x03` / WRITE `0x02` followed by a **16-bit a
 
 Every fetch is one 40-bit SPI read: an 8-bit command, a 16-bit address, then 2 data bytes. After every transaction CS stays high for at least 8 clocks, because spi-ram-emu on the RP2040 needs that time (about 50 of its clocks) to re-arm. That's 800 ns at 10 MHz.
 
-MISO is sampled at the end of the SCK high phase, or at the SCK rising edge when the MISO_RISE strap (`uio[6]`) is high. See [info.md](info.md) for which setting suits which RAM. Reset is synchronised internally: the CPU starts fetching 2 clocks after `rst_n` goes high. `cpu8sim` counts clocks with exactly this model. `test/test_programs.py` checks it against the RTL for every example program.
+MISO is sampled at the end of the SCK high phase, or at the SCK rising edge when the MISO_RISE strap (`uio[6]`) is high. See [info.md](info.md) for which setting suits which RAM. Reset starts at once when `rst_n` goes low, with or without a clock. Its release is synchronised internally: the CPU starts fetching 2 clocks after `rst_n` goes high. `cpu8sim` counts clocks with exactly this model. `test/test_programs.py` checks it against the RTL for every example program.
 
 ## STRLEN
 
@@ -162,5 +162,5 @@ A binary has no symbols and mixes code with data, so the disassembler follows th
 Two things to keep in mind:
 
 - Code that nothing jumps to or calls (an unused library routine, for example) appears as data. Use `-e` or `-a`.
-- Self-modifying code is shown as it is in the file, before it runs. The print library patches the operand of one `LDA`, so that instruction appears with operand 0.
+- Self-modifying code is shown as it is in the file, before it runs. `getline` in the input library patches one `STA ea,X` with the buffer address, so that instruction appears as `STA 0,X`.
 
