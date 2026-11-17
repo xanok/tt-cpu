@@ -1,47 +1,38 @@
-# Sample testbench for a Tiny Tapeout project
+# Tests of the chip Verilog
 
-This is a sample testbench for a Tiny Tapeout project. It uses [cocotb](https://docs.cocotb.org/en/stable/) to drive the DUT and check the outputs.
-See below to get started or for more information, check the [website](https://tinytapeout.com/hdl/testing/).
+cocotb tests, run with Icarus Verilog. The Tiny Tapeout GitHub workflow runs them on every push.
 
-## Setting up
+| File | What it tests |
+|------|---------------|
+| `test.py` | one small program per instruction or feature; checks outputs and memory after `HLT`, and reset |
+| `test_programs.py` | every `programs/*.asm` on the Verilog against the C simulator: the `OUT` values, the 4 KB memory and the exact clock count |
+| `tb.v` | the testbench: the chip (`src/`) connected to the SPI RAM model (`model/spi_ram_model.v`) |
+| `fuzz/` | random programs against the instruction model, with Verilator; see [fuzz/README.md](fuzz/README.md) |
 
-1. Edit [Makefile](Makefile) and modify `PROJECT_SOURCES` to point to your Verilog files.
-2. Edit [tb.v](tb.v) and replace `tt_um_example` with your module name.
+## Running
 
-## How to run
+Tools: `source ~/tools/oss-cad-suite/environment`, and `make -C ../tools` for the assembler and simulator.
 
-To run the RTL simulation:
+| Task | Command |
+|------|---------|
+| Verilog source (RTL) | `make` |
+| Same, with the MISO_RISE strap high and a RAM with stock spi-ram-emu timing | `make MISO_RISE=yes` |
+| Only some example programs | `make PROGRAMS=hello,primes` |
+| Gate-level netlist | `make GATES=yes PDK_ROOT=<pdk>` |
+| Gate-level netlist with the delays from the layout | `make GATES=yes SDF=<file>.sdf PDK_ROOT=<pdk>` |
+| Another clock period (default 100 ns = 10 MHz) | add `CLK_NS=40` |
 
-```sh
-make -B
-```
+`make` reports success even when a test fails. Check the `TESTS= PASS= FAIL=` line, or run `python -m cocotb_tools.check_results results.xml`.
 
-To run gatelevel simulation, first harden your project and copy `../runs/wokwi/results/final/verilog/gl/{your_module_name}.v` to `gate_level_netlist.v`.
+## Gate-level netlist
 
-Then run:
+Harden the design first, then copy `runs/wokwi/final/pnl/tt_um_xanok_cpu8.pnl.v` to `gate_level_netlist.v` in this folder. For the timing simulation, take the SDF file from `runs/wokwi/final/sdf/<corner>/` of the same run.
 
-```sh
-make -B GATES=yes
-```
+## Waveform
 
-If you wish to save the waveform in VCD format instead of FST format, edit tb.v to use `$dumpfile("tb.vcd");` and then run:
-
-```sh
-make -B FST=
-```
-
-This will generate `tb.vcd` instead of `tb.fst`.
-
-## How to view the waveform file
-
-Using GTKWave
+Every run writes `tb.fst`.
 
 ```sh
 gtkwave tb.fst tb.gtkw
-```
-
-Using Surfer
-
-```sh
 surfer tb.fst
 ```

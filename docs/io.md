@@ -214,7 +214,7 @@ Rules to follow:
 
 - Put the `.include` lines after the last instruction of your program. The libraries are code, and execution would run into them otherwise.
 - Keep code and data below `0xEFE` when you use input, and always below `0xF00`.
-- `print` and `getline` use self-modifying code, so they are not re-entrant. That only matters if you write interrupt-like tricks; cpu8 has no interrupts.
+- `getline` uses self-modifying code, so it is not re-entrant. That only matters if you write interrupt-like tricks; cpu8 has no interrupts.
 - For a non-blocking check ("is a key waiting?"), read the flag yourself: `LDA 0xEFE` then `JZ no_key`.
 
 ## How each platform implements it

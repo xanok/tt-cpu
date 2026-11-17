@@ -50,3 +50,18 @@ jobs:
             test/tb.fst
             test/results.xml
             test/output/*
+
+  # Random programs on the Verilog against the instruction model (test/fuzz),
+  # a short run: 300 programs in each MISO sampling mode.
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15  # a stuck job is stopped here, not at GitHub's 6-hour default
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Install OSS CAD Suite (Verilator)
+        uses: YosysHQ/setup-oss-cad-suite@v3
+
+      - name: Random-program test
+        run: make -C test/fuzz N=300
