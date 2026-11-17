@@ -16,7 +16,7 @@ An 8-bit CPU (accumulator, index register X, stack with CALL/RET) that runs from
 ## Quick start
 
 ```sh
-make -C tools                                    # build cpu8asm, cpu8sim, cpu8load
+make -C tools                                    # build cpu8asm, cpu8sim, cpu8dis, cpu8load
 tools/cpu8asm -o hello.bin programs/hello.asm
 tools/cpu8sim -a hello.bin                       # Hello, Tiny Tapeout!
 
@@ -41,7 +41,7 @@ src/            chip RTL (only these go to tapeout)
   project.v       tt_um_xanok_cpu8 wrapper (TT pinout)
   cpu.v           the CPU core + SPI master
 model/          SPI RAM model: testbench memory AND on-FPGA block RAM
-tools/          C tools: cpu8asm (assembler), cpu8sim (simulator), cpu8load (demo board loader)
+tools/          C tools: cpu8asm (assembler), cpu8sim (simulator), cpu8dis (disassembler), cpu8load (demo board loader)
 programs/       23 example programs, lib/print.asm and lib/input.asm, run_tests.sh
 rp2040/         demo board firmware (RP2350B and RP2040): SPI RAM emulator + USB loader; mock/ tests it on a PC
 test/           cocotb tests (TT CI runs these)
@@ -59,6 +59,7 @@ Toolchain for the Verilog tests and the FPGA: `source ~/tools/oss-cad-suite/envi
 |---|---|
 | Build the C tools | `make -C tools` |
 | Assemble | `tools/cpu8asm -o prog.bin -l prog.lst prog.asm` |
+| Disassemble | `tools/cpu8dis prog.bin` (`-a` every byte as code, `-e addr` extra entry point, `-S` assembler source) |
 | Simulate | `tools/cpu8sim -s prog.bin` (`-a` text output, `-k` keyboard input, `-i` input port, `-t` trace, `-d addr:len` dump) |
 | Run on the demo board | `tools/cpu8load -a prog.bin` (`-k` keyboard input, `-n` numbers, `-i` input port, `-r addr:len` dump RAM) |
 

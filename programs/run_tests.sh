@@ -7,9 +7,10 @@
 #   ; stdin: Ana\n42\n        text for the input mailbox (lib/input.asm)
 #   ; limit: N               endless program: run N instructions, compare
 #                            the first outputs with "expect"
+# It also checks the disassembler (cpu8dis) on every program.
 # Usage: ./run_tests.sh [prog.asm ...]
 cd "$(dirname "$0")" || exit 1
-make -s -C ../tools cpu8asm cpu8sim || exit 1
+make -s -C ../tools cpu8asm cpu8sim cpu8dis || exit 1
 mkdir -p build
 ASM=../tools/cpu8asm
 SIM=../tools/cpu8sim
@@ -70,4 +71,24 @@ for f in "${progs[@]}"; do
     if [ $result = PASS ]; then pass=$((pass + 1)); else fail=$((fail + 1)); fi
 done
 echo "$pass passed, $fail failed"
-[ $fail -eq 0 ]
+
+# Disassembler round trip: cpu8dis -S must give source that assembles back to
+# the same binary, both when it follows the code and with -a.
+rt=0
+rtfail=0
+for f in "${progs[@]}"; do
+    name=$(basename "$f" .asm)
+    [ -f "build/$name.bin" ] || continue
+    for mode in "" "-a"; do
+        if ../tools/cpu8dis -S $mode "build/$name.bin" > "build/$name.dis.asm" &&
+           $ASM -o "build/$name.dis.bin" "build/$name.dis.asm" 2> /dev/null &&
+           cmp -s "build/$name.bin" "build/$name.dis.bin"; then
+            rt=$((rt + 1))
+        else
+            echo "disassembler round trip FAILED: $name $mode"
+            rtfail=$((rtfail + 1))
+        fi
+    done
+done
+echo "disassembler round trip: $rt ok, $rtfail failed"
+[ $fail -eq 0 ] && [ $rtfail -eq 0 ]

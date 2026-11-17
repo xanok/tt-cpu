@@ -122,3 +122,22 @@ msg:    .asciz "hi\n"   ; .ascii: without the NUL
 - Mnemonics and labels are case-insensitive.
 - An immediate can be written with or without a leading `#`.
 - `.include "file"` inserts another source file. The path is relative to the including file.
+
+## Disassembler (`tools/cpu8dis`)
+
+`tools/cpu8dis prog.bin` prints a listing of a raw binary: address, bytes, generated labels and instructions.
+
+A binary has no symbols and mixes code with data, so the disassembler follows the code from address 0 through every jump, branch and call. cpu8 has no computed jumps, so this finds all the code the program can reach; the rest is shown as data. Labels are `L_xxx` for jump targets, `F_xxx` for called functions and `D_xxx` for data, where `xxx` is the address.
+
+| Option | Effect |
+|--------|--------|
+| `-a` | treat every byte pair as code, without following |
+| `-e ADDR` | also follow the code from this address (for routines nothing calls) |
+| `-s ADDR`, `-n LEN` | print only part of the image |
+| `-S` | plain assembler source; `cpu8asm` turns it back into the identical binary |
+
+Two things to keep in mind:
+
+- Code that nothing jumps to or calls (an unused library routine, for example) appears as data. Use `-e` or `-a`.
+- Self-modifying code is shown as it is in the file, before it runs. The print library patches the operand of one `LDA`, so that instruction appears with operand 0.
+
