@@ -15,6 +15,10 @@
   "//": "Users have reported that values up to 80 worked well for them.",
   "PL_TARGET_DENSITY_PCT": 60,
 
+  "//": "SYNTH_STRATEGY - the design fills the 1x1 tile (82% utilization). With the default (AREA 0)",
+  "//": "the detailed router does not converge; AREA 2 and AREA 1 route cleanly, AREA 3 does not.",
+  "SYNTH_STRATEGY": "AREA 2",
+
   "//": "CLOCK_PERIOD - Increase this in case you are getting setup time violations.",
   "//": "The value is in nanoseconds, so 20ns == 50MHz.",
   "CLOCK_PERIOD": 20,
