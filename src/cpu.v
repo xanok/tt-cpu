@@ -138,13 +138,18 @@ module cpu8 (
 
   wire [7:0] lhs = (op == OP_IMM && hi == I_CPX) ? x : a;
   wire [7:0] b   = (state == S_MWAIT) ? rx[7:0] : arg;
-  // ADC / SBC also add or subtract the carry flag (carry in / borrow in)
-  wire       cin = cf && (op == OP_IMM) && (hi == I_ADC || hi == I_SBC);
+  // One adder for add, subtract and compare, with a carry input:
+  //   add: lhs + b + cin          subtract: lhs + ~b + !cin  (= lhs - b - cin)
+  // ADC / SBC take cin from the carry flag (carry in / borrow in), the
+  // others use 0. The low bit of each operand only feeds the carry in.
+  wire       cin    = cf && (op == OP_IMM) && (hi == I_ADC || hi == I_SBC);
+  wire       sub    = (fn == 3'd2);
+  wire [9:0] sum    = {1'b0, lhs, 1'b1} + {1'b0, b ^ {8{sub}}, sub ^ cin};
+  wire [8:0] addsub = {sum[9] ^ sub, sum[8:1]};  // {carry or borrow, result}
   reg  [8:0] alu;  // {carry, result}
   always @* begin
     case (fn)
-      3'd1:    alu = {1'b0, lhs} + {1'b0, b} + {8'd0, cin};
-      3'd2:    alu = {1'b0, lhs} - {1'b0, b} - {8'd0, cin};  // carry = borrow
+      3'd1, 3'd2: alu = addsub;
       3'd3:    alu = {cf, lhs & b};
       3'd4:    alu = {cf, lhs | b};
       3'd5:    alu = {cf, lhs ^ b};
