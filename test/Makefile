@@ -23,6 +23,10 @@ else
 
 # Gate level simulation:
 SIM_BUILD				= sim_build/gl
+ifeq ($(MISO_RISE),yes)
+SIM_BUILD				= sim_build/gl_rise
+COMPILE_ARGS    += -DMISO_RISE
+endif
 COMPILE_ARGS    += -DGL_TEST
 COMPILE_ARGS    += -DFUNCTIONAL
 COMPILE_ARGS    += -DUSE_POWER_PINS
@@ -48,13 +52,12 @@ VERILOG_SOURCES += $(PWD)/tb.v
 TOPLEVEL = tb
 
 # List test modules to run, separated by commas and without the .py suffix.
-# test_programs runs every programs/*.asm on the RTL and compares it with the
-# C simulator; it probes internal signals, so it is RTL only.
-ifneq ($(GATES),yes)
-COCOTB_TEST_MODULES = test,test_programs
-else
-COCOTB_TEST_MODULES = test
-endif
+# test_programs runs every programs/*.asm and compares it with the C
+# simulator. It only looks at the chip's pins and the testbench RAM, so it
+# also runs on the gate-level netlist (make GATES=yes), where it takes a
+# few minutes. MODULES=test runs only the short directed tests.
+MODULES ?= test,test_programs
+COCOTB_TEST_MODULES = $(MODULES)
 
 # The tests call the C assembler and simulator
 $(shell $(MAKE) -s -C $(PWD)/../tools cpu8asm cpu8sim >&2)

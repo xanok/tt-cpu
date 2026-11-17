@@ -71,6 +71,7 @@ Toolchain for the Verilog tests and the FPGA: `source ~/tools/oss-cad-suite/envi
 | Chip Verilog, including every example against the simulator | `cd test && make` (waveform: `gtkwave tb.fst`) |
 | Same, with the MISO_RISE strap high and stock spi-ram-emu RAM timing | `cd test && make MISO_RISE=yes` |
 | Random programs on the Verilog against the instruction model, both sampling modes | `cd test/fuzz && make` (`N=20000 SEED=7` for more; `make coverage` for line/toggle coverage) |
+| Same tests and every example on the routed gate-level netlist | copy `runs/wokwi/final/pnl/tt_um_xanok_cpu8.pnl.v` from a hardening run to `test/gate_level_netlist.v`, then `cd test && make GATES=yes PDK_ROOT=<pdk>` (add `MISO_RISE=yes` for the other strap setting; GitHub's `gl_test` job does the first) |
 | Loader and firmware protocol on the mock demo board | `cd rp2040/mock && make test` |
 | FPGA top: UART output against the simulator | `cd fpga && make sim PROG=../programs/hello.asm` |
 

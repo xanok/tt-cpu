@@ -18,12 +18,17 @@ import tempfile
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, Edge, First, ReadOnly, RisingEdge
+from cocotb.triggers import ClockCycles, Edge, FallingEdge, First, RisingEdge
 
 from cpu8tools import MEM_SIZE, assemble_file, tool
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROGRAMS = sorted(glob.glob(os.path.join(HERE, "..", "programs", "*.asm")))
+# PROGRAMS=hello,primes limits the run to those examples (handy on the
+# gate-level netlist, where every program takes a while)
+if os.environ.get("PROGRAMS"):
+    _only = {n.strip() for n in os.environ["PROGRAMS"].split(",")}
+    PROGRAMS = [p for p in PROGRAMS if os.path.basename(p)[:-4] in _only]
 
 
 def header(path):
@@ -92,22 +97,34 @@ async def test_program(dut, program):
     dut.ui_in.value = ui
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 5)
+    # Release reset in the middle of a clock period. Releasing it exactly on
+    # the clock edge is a race on the gate-level netlist: the clock tree
+    # delays the flip-flop's clock, so the chip would start one clock earlier
+    # than the RTL and the clock count would differ by one.
+    await FallingEdge(dut.clk)
     dut.rst_n.value = 1
     if stdin:
         cocotb.start_soon(feed_mailbox(dut, stdin.encode().decode("unicode_escape").encode("latin-1")))
 
     outs = []
     timeout = ref_clocks + 1000
+    await ClockCycles(dut.clk, 4)  # the reset has reached every flip-flop: pins are defined
     while not int(dut.halted_pin.value):
         trig = await First(Edge(dut.strobe_pin), RisingEdge(dut.halted_pin),
                            ClockCycles(dut.clk, timeout))
         if isinstance(trig, Edge):
-            await ReadOnly()  # uo_out and the strobe change on the same clock edge
+            # uo_out changes on the same clock edge as the strobe; on the
+            # gate-level netlist the two arrive a few gate delays apart, so
+            # read in the middle of the clock period, when both have settled
+            await FallingEdge(dut.clk)
             outs.append(int(dut.uo_out.value))
             await RisingEdge(dut.clk)
         elif not int(dut.halted_pin.value):
             raise AssertionError(f"{program}: no HLT within {timeout} clocks")
 
+    # HALTED and the testbench's clock counter change at the same clock
+    # edge; read the counter half a clock later, when it has settled
+    await FallingEdge(dut.clk)
     memory = [int(dut.ram.mem[i].value) for i in range(MEM_SIZE)]
     cycles = int(dut.cycles.value)
     dut._log.info(f"{program}: {len(outs)} outputs, {cycles} clocks")

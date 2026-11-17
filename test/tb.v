@@ -9,7 +9,11 @@ module tb ();
   // Dump the signals to a FST file. You can view it with gtkwave or surfer.
   initial begin
     $dumpfile("tb.fst");
+`ifdef GL_TEST
+    $dumpvars(1, tb);  // pins only: every net of the netlist would be huge and slow
+`else
     $dumpvars(0, tb);
+`endif
     #1;
   end
 
@@ -67,12 +71,10 @@ module tb ();
       .miso(ram_miso)
   );
 
-`ifndef GL_TEST
   // For test_programs.py: the number of clocks from reset until HLT.
   reg  [31:0] cycles;
   always @(posedge clk)
     if (!rst_n) cycles <= 32'd0;
     else if (!uio_out[4]) cycles <= cycles + 32'd1;
-`endif
 
 endmodule
