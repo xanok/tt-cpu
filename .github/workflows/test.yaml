@@ -30,6 +30,9 @@ jobs:
           make
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
+          # again with the MISO_RISE strap set and a RAM with stock spi-ram-emu timing
+          make MISO_RISE=yes
+          python -m cocotb_tools.check_results results.xml
 
       - name: Test Summary
         uses: test-summary/action@v2.4

@@ -12,6 +12,13 @@ cpu8 is a tiny 8-bit CPU with an accumulator, an index register X and a stack (C
 
 `ui_in` is an 8-bit input port, read with `IN`. `uo_out` is an 8-bit output port, written with `OUT`. `uio[4]` goes high after a `HLT`. `uio[5]` (OUT_STROBE) toggles on every `OUT`, so the demo board's RP2040 can capture each output byte, repeated values included, and pass it to the PC as text. See [isa.md](isa.md) for the instruction set.
 
+`uio[6]` (MISO_RISE) is an input strap that selects when the CPU samples MISO. Tie it low or high; don't leave it floating, and don't change it while the CPU runs.
+
+- **0:** at the end of the SCK high phase. Use this with a RAM that changes MISO after the falling SCK edge: a real 23LC512, or the modified spi-ram-emu in `rp2040/`.
+- **1:** at the SCK rising edge, like a standard SPI mode-0 master. Use this with the stock spi-ram-emu, which changes MISO right after the rising edge.
+
+`rst_n` is synchronised inside the chip, so it can be released at any time. Reset takes effect 2 clocks after the pin changes; hold it low for at least 4 clocks.
+
 ## How to test
 
 1. On the demo board, run [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu) on the RP2040, wired to uio[0] CS#, uio[1] MOSI, uio[2] MISO and uio[3] SCK.

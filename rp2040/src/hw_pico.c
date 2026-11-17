@@ -104,8 +104,9 @@ void hw_init(void)
         in_pin(pins_uo[i]);
         ui_mask |= 1u << pins_ui[i];
     }
-    for (int i = 4; i < 8; i++)   // HALTED and unused uio
+    for (int i = 4; i < 8; i++)   // HALTED, OUT_STROBE, strap (until attached), unused
         in_pin(PIN_UIO(i));
+    gpio_put(PIN_MISO_RISE, 0);
     // uio0..3 (SPI) are set up by setup_simulated_sram().
 
     for (int i = 0; i < 8; i++)  // UO_FROM_GPIO must agree with PINS_UO
@@ -153,6 +154,7 @@ void hw_attach(bool on)
             gpio_set_dir(pins_ui[i], GPIO_IN);
         }
     }
+    gpio_set_dir(PIN_MISO_RISE, on ? GPIO_OUT : GPIO_IN);
     sram_drive_miso(on);
 }
 
@@ -227,6 +229,8 @@ bool hw_set_sysclk(uint32_t khz)
     vreg_set_voltage(v);
     return true;
 }
+
+void hw_set_miso_rise(bool rise) { gpio_put(PIN_MISO_RISE, rise); }
 
 void hw_set_ui(uint8_t v)
 {

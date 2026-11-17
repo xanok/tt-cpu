@@ -12,6 +12,11 @@ ifneq ($(GATES),yes)
 
 # RTL simulation:
 SIM_BUILD				= sim_build/rtl
+# make MISO_RISE=yes: strap MISO_RISE = 1 and a RAM with stock spi-ram-emu timing
+ifeq ($(MISO_RISE),yes)
+SIM_BUILD				= sim_build/rtl_rise
+COMPILE_ARGS    += -DMISO_RISE
+endif
 VERILOG_SOURCES += $(addprefix $(SRC_DIR)/,$(PROJECT_SOURCES))
 
 else

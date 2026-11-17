@@ -102,7 +102,9 @@ The memory is 23LC512-style: READ `0x03` / WRITE `0x02` followed by a **16-bit a
 | `CALL`, `RET` (two bytes) | 176 |
 | `STRLEN` | 161 + 17 per character |
 
-Every fetch is one 40-bit SPI read: an 8-bit command, a 16-bit address, then 2 data bytes. After every transaction CS stays high for at least 8 clocks, because spi-ram-emu on the RP2040 needs that time (about 50 of its clocks) to re-arm. That's 800 ns at 10 MHz. `cpu8sim` counts clocks with exactly this model. `test/test_programs.py` checks it against the RTL for every example program.
+Every fetch is one 40-bit SPI read: an 8-bit command, a 16-bit address, then 2 data bytes. After every transaction CS stays high for at least 8 clocks, because spi-ram-emu on the RP2040 needs that time (about 50 of its clocks) to re-arm. That's 800 ns at 10 MHz.
+
+MISO is sampled at the end of the SCK high phase, or at the SCK rising edge when the MISO_RISE strap (`uio[6]`) is high. See [info.md](info.md) for which setting suits which RAM. Reset is synchronised internally: the CPU starts fetching 2 clocks after `rst_n` goes high. `cpu8sim` counts clocks with exactly this model. `test/test_programs.py` checks it against the RTL for every example program.
 
 ## STRLEN
 

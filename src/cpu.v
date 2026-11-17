@@ -17,7 +17,9 @@
 
 module cpu8 (
     input  wire       clk,
-    input  wire       rst_n,
+    input  wire       rst_n,       // asynchronous; synchronised below
+    input  wire       miso_rise,   // static strap: 0 = sample MISO at the end of the SCK high
+                                   // phase, 1 = sample at the SCK rising edge
     input  wire [7:0] in_port,
     output reg  [7:0] out_port,
     output reg        out_strobe,  // toggles on every OUT (byte-ready for the host)
@@ -50,6 +52,15 @@ module cpu8 (
              S_MWAIT = 3'd3,  // wait for data read or write
              S_HALT  = 3'd4,
              S_STRL  = 3'd5;  // STRLEN: stream bytes until NUL
+
+  // ---------------- reset synchroniser ----------------
+  // rst_n has no timing relation to clk. Without this, flip-flops could
+  // leave reset on different clocks (seen in simulation: the first
+  // instruction is skipped). Reset now starts and ends 2 clocks late, the
+  // same for every flip-flop. These two flip-flops have no reset themselves.
+  reg  [1:0]  rst_sync;
+  always @(posedge clk) rst_sync <= {rst_sync[0], rst_n};
+  wire        rst_ni = rst_sync[1];
 
   reg  [2:0]  state;
   reg  [11:0] pc;
@@ -143,7 +154,7 @@ module cpu8 (
   wire [7:0] x_step = x + ((hi == M_DEX) ? 8'hFF : 8'h01);  // INX / DEX
 
   always @(posedge clk) begin
-    if (!rst_n) begin
+    if (!rst_ni) begin
       state    <= S_FETCH;
       pc       <= 12'd0;
       a        <= 8'd0;
@@ -164,14 +175,21 @@ module cpu8 (
       lastbit  <= 6'd0;
       busy     <= 1'b0;
     end else begin
-      // SPI mode 0: MOSI changes while SCK low, MISO sampled at the end of
-      // the high phase (late sampling tolerates pad/board delays).
+      // SPI mode 0: MOSI changes while SCK low. MISO is sampled
+      //   miso_rise = 0: at the end of the SCK high phase. For a RAM that
+      //     changes MISO after the falling edge (23LC512, rp2040/ firmware);
+      //     gives it almost a full SCK period.
+      //   miso_rise = 1: at the clock edge that raises SCK, like a standard
+      //     mode-0 master. Needed for a RAM that changes MISO right after
+      //     the rising edge (stock spi-ram-emu); also works with the others,
+      //     with half an SCK period of setup.
       if (busy) begin
         if (!spi_sck) begin
           spi_sck <= 1'b1;
+          if (miso_rise) rx <= {rx[14:0], spi_miso};
         end else begin
           spi_sck <= 1'b0;
-          rx      <= {rx[14:0], spi_miso};
+          if (!miso_rise) rx <= {rx[14:0], spi_miso};
           tx      <= {tx[38:0], 1'b0};
           bitcnt  <= bitcnt + 6'd1;
           if (bitcnt == lastbit) begin

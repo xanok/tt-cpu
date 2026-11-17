@@ -30,6 +30,7 @@ static struct {
     int      sel;          // selected project address, -1 = none
     bool     in_reset;
     bool     monitor;
+    bool     miso_rise;    // MISO_RISE strap
     uint64_t t_go;         // time of the last GO
     uint8_t  last_uo;
     bool     last_halted;
@@ -135,6 +136,7 @@ static void cmd_help(void)
         "# GO                   pulse reset, then run",
         "# CLK hz               project clock, 0 = stop -> OK <actual hz>",
         "# UI val               set ui_in",
+        "# EDGE 0|1             MISO_RISE strap: CPU samples MISO at SCK fall (0) / rise (1); holds reset",
         "# W addr hexbytes      write up to 128 bytes to RAM",
         "# R addr len           read up to 128 bytes -> OK <hex>",
         "# FILL addr len val    fill RAM",
@@ -151,11 +153,11 @@ static void cmd_help(void)
 
 static void cmd_status(void)
 {
-    reply("OK uo=%02X halted=%d rst=%d clk=%lu ui=%02X sel=%d sys=%lu mon=%d t=%lu lost=%lu",
+    reply("OK uo=%02X halted=%d rst=%d clk=%lu ui=%02X sel=%d sys=%lu mon=%d t=%lu lost=%lu edge=%d",
           hw_get_uo(), hw_get_halted() ? 1 : 0, st.in_reset ? 1 : 0,
           (unsigned long)st.clk_hz, st.ui, st.sel, (unsigned long)hw_sys_hz(),
           st.monitor ? 1 : 0, st.in_reset ? 0ul : since_go_us(),
-          (unsigned long)hw_out_lost());
+          (unsigned long)hw_out_lost(), st.miso_rise ? 1 : 0);
 }
 
 static void cmd_clock(uint32_t hz)
@@ -282,7 +284,7 @@ static void execute(char *cmdline)
 
     static const struct { const char *name; int nargs; } cmds[] = {
         {"PING", 0}, {"HELP", 0}, {"ST", 0}, {"SEL", 1}, {"ATTACH", 0},
-        {"DETACH", 0}, {"RST", 0}, {"GO", 0}, {"CLK", 1}, {"UI", 1},
+        {"DETACH", 0}, {"RST", 0}, {"GO", 0}, {"CLK", 1}, {"UI", 1}, {"EDGE", 1},
         {"W", 2}, {"R", 2}, {"FILL", 3}, {"MON", 1}, {"SYSCLK", 1}, {"BOOT", 0},
     };
     const char *name = argv[0];
@@ -334,6 +336,13 @@ static void execute(char *cmdline)
             return;
         st.ui = (uint8_t)a;
         hw_set_ui(st.ui);
+        reply("OK");
+    } else if (!strcmp(name, "EDGE")) {
+        if (!arg_num(argv, 1, 1, &a))
+            return;
+        hold_reset();  // the strap must not change while the CPU runs
+        st.miso_rise = a != 0;
+        hw_set_miso_rise(st.miso_rise);
         reply("OK");
     } else if (!strcmp(name, "W")) {
         if (arg_num(argv, 1, RAM_SIZE - 1, &a))

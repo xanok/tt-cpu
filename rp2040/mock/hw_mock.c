@@ -98,6 +98,7 @@ bool hw_set_sysclk(uint32_t khz)
 }
 
 void hw_set_ui(uint8_t v) { ui = v; }
+void hw_set_miso_rise(bool rise) { (void)rise; }  // the mock has no SPI timing
 
 void mock_cpu_update(void)
 {

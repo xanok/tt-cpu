@@ -50,7 +50,7 @@ The map is for the **TT06+ demo board with RP2040**, which was used for TT06, TT
 | uo_out[0..3] / uo_out[4..7] | 5-8 / 13-16 |
 | ui_in[0..3] / ui_in[4..7] | 9-12 / 17-20 |
 | uio[0..7] | 21-28 |
-| cpu8: CS_N, MOSI, MISO, SCK, HALTED, OUT_STROBE | uio0-5 = 21, 22, 23, 24, 25, 26 |
+| cpu8: CS_N, MOSI, MISO, SCK, HALTED, OUT_STROBE, MISO_RISE | uio0-6 = 21, 22, 23, 24, 25, 26, 27 |
 
 - **TT04/TT05 boards are not supported.** They route rst_n and the mux control lines through an on-board analog mux that is shared with uo_out[0..3].
 - **TT07 chips:** the TT07 carrier board swaps ctrl_sel_inc and ctrl_sel_rst_n. Set `TT07_CB_FIX 1` in `pinmap.h`.
@@ -76,6 +76,12 @@ Upstream needs `SCK = MOSI + 1` and `CS = MOSI + 2`. cpu8's pins (CS=uio0, MOSI=
 2. **MISO is not driven until the project is selected** (`sram_drive_miso()`). While another project is selected, its uio2 could be an output.
 3. **MISO changes after the falling SCK edge, not the rising one.** Upstream shifts out right after the rising edge. That is valid for a master that samples on the rising edge. cpu8 samples MISO at the end of the SCK high phase (`src/cpu.v`, for pad-delay tolerance), so with upstream timing it would read the next bit. At 10 MHz the half period is 100 ns, while the emulator updates MISO roughly 30-60 ns after the edge. With the change the emulator behaves like a real 23LC512 and like `model/spi_ram_model.v`, which the cocotb tests use. As a side effect the first data bit gets half an SCK period more time. FAST READ keeps working.
 4. **Linker.** Upstream's `sram_memmap.ld` targets pico-sdk 1.x. It is replaced by sdk 2.x overrides (`RAM_LENGTH=0x30000`, plus an `SPI_RAM` region at 0x20030000 and a `.spi_ram` section).
+
+### MISO sample edge (`EDGE`, `cpu8load -e`)
+
+The chip has a strap, MISO_RISE (uio6), which the firmware drives while the project is attached. `EDGE 0` (the default) makes cpu8 sample MISO at the end of the SCK high phase, which is what change 3 above is for. `EDGE 1` makes it sample at the SCK rising edge, like a standard mode-0 master. With `EDGE 1` the chip also works with the **stock** spi-ram-emu timing, so if the modified PIO program gives trouble on hardware, upstream's `sram.pio` output timing plus `EDGE 1` is the fallback. `EDGE 1` should work with the modified emulator too, as long as it answers within half an SCK period. `EDGE` holds the project in reset.
+
+In simulation (`test/`, `make MISO_RISE=yes`) all tests pass with stock timing and the strap high, and the wrong pairings fail as expected.
 
 ## Timing limits (read this before choosing a clock)
 
@@ -111,6 +117,7 @@ cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visib
 | `GO` | `OK` | rst_n low for ≥ max(1 ms, 10 clocks), then release. `ERR` if the clock is stopped |
 | `CLK hz` | `OK <actual Hz>` | PWM on the clk pin: sys / (div × period), so for example 9.5 MHz gives 9523809. `0` stops it (pin low). `ERR` above sys/5 or below about 12 Hz |
 | `UI val` | `OK` | 0..255 |
+| `EDGE 0\|1` | `OK` | MISO_RISE strap; holds the project in reset |
 | `W addr hex` | `OK <n>` | write up to 128 bytes |
 | `R addr len` | `OK <hex>` | read 1..128 bytes |
 | `FILL addr len val` | `OK` | for example `FILL 0 4096 0` |
@@ -121,7 +128,7 @@ cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visib
 
 Addresses cover the whole 64 KB emulated RAM. cpu8 only sees 0x0000-0x0FFF and keeps its stack at 0xF00-0xFFF. RAM can be written and read while the CPU runs. That is useful for peeking at results, but it is not synchronised with the CPU.
 
-The `cpu8load` sequence is: `PING`, [`SYSCLK`], `RST`, `SEL p` or `ATTACH`, `FILL 0 4096 0`, then `W` in 128-byte chunks, then `R` to read everything back and verify, `CLK f`, `UI v`, [`MON 1`], `GO`. Then it polls `ST` and/or follows `EV` lines until HALTED or the timeout, then `ST`, [`MON 0`], and `R` for each `-r` dump.
+The `cpu8load` sequence is: `PING`, [`SYSCLK`], `RST`, `SEL p` or `ATTACH`, `FILL 0 4096 0`, then `W` in 128-byte chunks, then `R` to read everything back and verify, `CLK f`, `UI v`, `EDGE e`, [`MON 1`], `GO`. Then it polls `ST` and/or follows `EV` lines until HALTED or the timeout, then `ST`, [`MON 0`], and `R` for each `-r` dump.
 
 ## Testing without hardware
 

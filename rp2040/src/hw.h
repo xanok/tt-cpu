@@ -21,6 +21,7 @@ uint32_t hw_min_clock(void);          // lowest clock hw_set_clock can make
 uint32_t hw_sys_hz(void);
 bool     hw_set_sysclk(uint32_t khz); // false if not possible
 void     hw_set_ui(uint8_t v);
+void     hw_set_miso_rise(bool rise); // MISO_RISE strap (uio6), driven while attached
 uint8_t  hw_get_uo(void);
 bool     hw_get_halted(void);
 // OUT capture: every edge of OUT_STROBE (uio5) stores the uo_out value.

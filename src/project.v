@@ -33,16 +33,19 @@ module tt_um_xanok_cpu8 (
       .spi_cs_n(cs_n),
       .spi_sck (sck),
       .spi_mosi(mosi),
-      .spi_miso(uio_in[2])
+      .spi_miso(uio_in[2]),
+      .miso_rise(uio_in[6])
   );
 
   // uio[0]=CS_N  uio[1]=MOSI  uio[2]=MISO(in)  uio[3]=SCK  uio[4]=HALTED
   // uio[5]=OUT_STROBE: toggles on every OUT, so the host can capture each
   // byte written to uo_out (also repeated values) - used for text output.
+  // uio[6]=MISO_RISE (in): strap, 0 = sample MISO at the end of the SCK high
+  // phase, 1 = at the SCK rising edge. Tie it; do not leave it floating.
   assign uio_out = {2'b00, strobe, halted, sck, 1'b0, mosi, cs_n};
   assign uio_oe  = 8'b0011_1011;
 
-  wire _unused = &{ena, uio_in[7:3], uio_in[1:0], 1'b0};
+  wire _unused = &{ena, uio_in[7], uio_in[5:3], uio_in[1:0], 1'b0};
 
 `ifndef SYNTH_FPGA
   (* keep *)

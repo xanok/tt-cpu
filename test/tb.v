@@ -49,8 +49,16 @@ module tb ();
   );
 
   // External SPI RAM (program + data). MISO goes to uio[2].
-  assign uio_in = {5'b0, ram_miso, 2'b0};
-  spi_ram_model #(.AW(12)) ram (
+  // With -DMISO_RISE (make MISO_RISE=yes) the RAM changes MISO after the
+  // rising SCK edge, like the stock spi-ram-emu, and the MISO_RISE strap
+  // (uio[6]) is set so the CPU samples on the rising edge.
+`ifdef MISO_RISE
+  localparam MISO_RISE_STRAP = 1'b1;
+`else
+  localparam MISO_RISE_STRAP = 1'b0;
+`endif
+  assign uio_in = {1'b0, MISO_RISE_STRAP, 3'b0, ram_miso, 2'b0};
+  spi_ram_model #(.AW(12), .EARLY(MISO_RISE_STRAP)) ram (
       .clk (clk),
       .cs_n(uio_out[0]),
       .sck (uio_out[3]),

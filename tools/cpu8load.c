@@ -328,6 +328,8 @@ static void usage(FILE *f)
 "  -f HZ      project clock in Hz (default 10000000)\n"
 "  -i VAL     value for ui_in, the CPU's IN port (default 0)\n"
 "  -s KHZ     set the RP2040 system clock first (default: firmware's 200000)\n"
+"  -e 0|1     MISO_RISE strap: the CPU samples MISO at the end of the SCK\n"
+"             high phase (0, default) or at the SCK rising edge (1)\n"
 "  -w         wait until the CPU executes HLT (HALTED pin high)\n"
 "  -a         print the bytes the program writes with OUT as text\n"
 "             (captured on the OUT_STROBE pin; like cpu8sim -a); implies -w\n"
@@ -348,18 +350,19 @@ int main(int argc, char **argv)
 {
     const char *dev = "/dev/ttyACM0";
     long project = -1;
-    unsigned long clk = 10000000, ui = 0, sysclk = 0, timeout_s = 10;
+    unsigned long clk = 10000000, ui = 0, sysclk = 0, timeout_s = 10, edge = 0;
     int wait_halt = 0, monitor = 0, ndumps = 0;
     unsigned dump_addr[MAX_DUMPS], dump_len[MAX_DUMPS];
     int opt;
 
-    while ((opt = getopt(argc, argv, "d:p:f:i:s:wanmt:r:vh")) != -1) {
+    while ((opt = getopt(argc, argv, "d:p:f:i:s:e:wanmt:r:vh")) != -1) {
         switch (opt) {
         case 'd': dev = optarg; break;
         case 'p': project = (long)num_arg("-p", optarg, 1023); break;
         case 'f': clk = num_arg("-f", optarg, 100000000); break;
         case 'i': ui = num_arg("-i", optarg, 255); break;
         case 's': sysclk = num_arg("-s", optarg, 1000000); break;
+        case 'e': edge = num_arg("-e", optarg, 1); break;
         case 'w': wait_halt = 1; break;
         case 'a': case 'n': out_mode = opt; wait_halt = 1; break;
         case 'm': monitor = 1; break;
@@ -450,6 +453,7 @@ int main(int argc, char **argv)
     if (real_clk != clk)
         fprintf(info, "clock: asked %lu Hz, running at %lu Hz\n", clk, real_clk);
     command(NULL, 0, REPLY_MS, "UI %lu", ui);
+    command(NULL, 0, REPLY_MS, "EDGE %lu", edge);
     if (monitor) {
         show_events = 1;
         command(NULL, 0, REPLY_MS, "MON 1");

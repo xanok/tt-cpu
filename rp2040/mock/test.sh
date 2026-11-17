@@ -62,6 +62,7 @@ check "timeout"         2 "did not halt within 1 s"  -- $L -w -t 1 "$TMP/forever
 check "text output"     0 "^Hello, Tiny Tapeout!$"   -- $L -a "$TMP/hello.bin"
 check "uneven clock"    0 "running at 9523809 Hz"    -- $L -f 9500000 "$TMP/prog.bin"
 check "sysclk"          0 "sys=125000000"            -- $L -s 125000 -w "$TMP/count.bin"
+check "edge strap"      0 "halted = yes"             -- $L -e 1 -w "$TMP/count.bin"
 check "sysclk back"     0 "sys=200000000"            -- $L -s 200000 "$TMP/prog.bin"
 check "bad -r"          1 "outside the 64 KB RAM"    -- $L -r 0xFFF0:32 "$TMP/prog.bin"
 
@@ -117,6 +118,9 @@ tests = [
     ("R 0x10 4", "OK 5555BEEF"),
     ("UI 256", "ERR 256 out of range (max 255)"),
     ("UI 12x", "ERR bad number '12x'"),
+    ("EDGE 2", "ERR 2 out of range (max 1)"),
+    ("EDGE 1", "OK"),
+    ("EDGE 0", "OK"),
     ("CLK 0", "OK 0"),
     ("GO", "ERR clock is stopped (send CLK first)"),
     ("CLK 1", "ERR 1 Hz too slow: min 12 Hz"),

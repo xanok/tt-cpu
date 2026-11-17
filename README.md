@@ -25,6 +25,7 @@ Toolchain: `source ~/tools/oss-cad-suite/environment`
 | Test the examples in the simulator | `programs/run_tests.sh` |
 | Run on the demo board (RP2040 firmware in `rp2040/`) | `tools/cpu8load -a prog.bin` (text output), `-n` (numbers), `-r addr:len` (dump RAM) |
 | Run tests (RTL, incl. every example vs the simulator) | `cd test && make` (waveform in `test/tb.fst`: `gtkwave tb.fst`) |
+| Same, with the MISO_RISE strap high and stock spi-ram-emu RAM timing | `cd test && make MISO_RISE=yes` |
 | Build FPGA bitstream | `cd fpga && make` (or `make PROG=../programs/other.asm`) |
 | Flash to SRAM (temporary) | `cd fpga && make flash` |
 | Flash permanently | `cd fpga && make flash-persist` |

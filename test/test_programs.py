@@ -91,4 +91,5 @@ async def test_program(dut, program):
     assert outs == ref_outs, f"OUT values differ: RTL {outs} vs sim {ref_outs}"
     diff = [hex(a) for a in range(MEM_SIZE) if memory[a] != ref_mem[a]]
     assert not diff, f"memory differs at {diff[:8]}"
-    assert cycles == ref_clocks, f"clocks: RTL {cycles} vs sim {ref_clocks}"
+    # +2: the reset synchroniser releases the CPU 2 clocks after rst_n
+    assert cycles == ref_clocks + 2, f"clocks: RTL {cycles} vs sim {ref_clocks} + 2"

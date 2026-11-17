@@ -42,6 +42,7 @@
 #define PIN_SPI_SCK         PIN_UIO(3)  // chip -> RP2040
 #define PIN_HALTED          PIN_UIO(4)  // chip -> RP2040
 #define PIN_OUT_STROBE      PIN_UIO(5)  // chip -> RP2040, toggles on every OUT
+#define PIN_MISO_RISE       PIN_UIO(6)  // RP2040 -> chip, strap: MISO sample edge
 
 // For reference, TT DB v3 (RP2350B, GPIOMapTTDBv3, current firmware):
 //   clk 16, rst_n 14, ctrl_ena 0, ctrl_sel_rst_n 1, ctrl_sel_inc 2,

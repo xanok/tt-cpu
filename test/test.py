@@ -391,3 +391,31 @@ async def test_out_strobe(dut):
             break
     assert toggles == 4
     assert u(dut.uo_out) == ord("b")
+
+
+@cocotb.test()
+async def test_reset_mid_run(dut):
+    """Reset pulses at many points of a running program (also in the middle of
+    SPI transactions, and not aligned to the clock): the program must restart
+    from address 0 every time and give the right result."""
+    from cocotb.triggers import Timer
+    await boot(dut, """
+        LDI 0x11
+        STA v
+        CALL f
+        OUT
+        HLT
+f:      LDA v
+        ADI 1
+        RET
+v:      .byte 0
+""")
+    for wait in (1, 2, 3, 7, 40, 83, 95, 170, 251, 333, 420, 505):
+        await ClockCycles(dut.clk, wait)
+        await Timer(37, unit="ns")       # release/assert away from the clock edge
+        dut.rst_n.value = 0
+        await Timer(350, unit="ns")      # 3.5 clocks
+        dut.rst_n.value = 1
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 0x12
+    assert mem(dut, 0xFFE) == 0x00 and mem(dut, 0xFFF) == 0x06  # one CALL, SP reset

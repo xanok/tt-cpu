@@ -50,7 +50,7 @@ pinout:
   uio[3]: "SPI_SCK"
   uio[4]: "HALTED"
   uio[5]: "OUT_STROBE"
-  uio[6]: ""
+  uio[6]: "MISO_RISE"
   uio[7]: ""
 
 # Do not change!
