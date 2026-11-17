@@ -1,0 +1,8 @@
+/* cpu8 change: replaces upstream sram_memmap.ld (written for pico-sdk 1.x)
+   with pico-sdk 2.x linker-script overrides. RAM is shortened to 192k by
+   CMakeLists.txt (RAM_LENGTH), and the last 64k bank becomes the emulated
+   SPI RAM, which sram.pio expects at the fixed address 0x20030000. */
+MEMORY
+{
+    SPI_RAM(rw) : ORIGIN = 0x20030000, LENGTH = 64k
+}

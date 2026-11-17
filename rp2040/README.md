@@ -1,0 +1,133 @@
+# cpu8 loader firmware for the Tiny Tapeout demo board
+
+cpu8 has no memory on the chip. It runs from an SPI RAM, and on the TT demo board the RP2040 plays that RAM. This firmware:
+
+- **core1** runs [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu) by Michael Bell. It emulates a 64 KB 23LC512-style SPI RAM on the project's uio pins. This repo has a modified copy (see below).
+- **core0** runs a USB serial (CDC) command handler. It can select the TT project, load a program into the emulated RAM, drive the project clock, ui_in and rst_n, report uo_out and HALTED, read RAM back, and stream uo_out changes.
+
+The PC side is [`../tools/cpu8load.c`](../tools/cpu8load.c).
+
+```
+cpu8load -p <project address> -w -m -r 0x800:32 prog.bin
+```
+
+## Files
+
+| Path | What it is |
+|------|------------|
+| `src/pinmap.h` | Demo board GPIO map. All pin numbers live here. |
+| `src/proto.c`, `proto.h` | Command parser in plain C. It is also compiled on the PC for the mock. |
+| `src/hw.h` | Hardware interface the parser calls |
+| `src/hw_pico.c` | RP2040 code for it: pins, PWM clock, project mux |
+| `src/main.c` | Starts spi-ram-emu and USB, then loops over commands |
+| `spi-ram-emu/` | Modified copy of `sram.c/.h/.pio` (BSD-3, see `LICENSE`), plus pico-sdk 2.x linker overrides in `ld/` |
+| `boards/tt_demo_rp2040.h` | Board header: Pico settings with a slower flash clock, for 200 MHz |
+| `mock/` | PC mock (the real parser plus fake hardware on a pty) and `test.sh` |
+
+## Build
+
+You need an ARM GCC and pico-sdk 2.x with the tinyusb submodule. On this machine both are installed without sudo:
+
+```
+export PATH=~/tools/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin:$PATH
+cmake -B build -DPICO_SDK_PATH=$HOME/tools/pico-sdk -DPICOTOOL_FETCH_FROM_GIT_PATH=$HOME/tools/picotool
+cmake --build build -j8          # -> build/cpu8_loader.uf2
+```
+
+Toolchain setup used: xPack arm-none-eabi-gcc 15.2.1-1.1 (tarball unpacked into `~/tools`). pico-sdk 2.3.1 is a git clone in `~/tools/pico-sdk`, with `git submodule update --init lib/tinyusb`. On the first configure, the SDK fetches and builds picotool into `~/tools/picotool`.
+
+**Flashing:** hold the demo board's BOOT button while plugging in USB, then copy `cpu8_loader.uf2` to the RPI-RP2 drive. Later you can send `BOOT` (or run `echo BOOT > /dev/ttyACM0`) to get back to the bootloader. This firmware replaces the TT MicroPython firmware. Flash the TT UF2 again to go back.
+
+## Board and pin map
+
+The map is for the **TT06+ demo board with RP2040**, which was used for TT06, TT07, TT08 and later RP2040 shuttles. It comes from `GPIOMapTT06` in [tt-micropython-firmware](https://github.com/TinyTapeout/tt-micropython-firmware) `src/ttboard/pins/gpio_map.py`, in the last version before commit `37cf3e8` (2026-01-27, "Exclusive RP2350/ETR DB support: previous RP2040 support withdrawn").
+
+| Signal | RP2040 GPIO |
+|--------|-------------|
+| project clk | 0 (PWM slice 0 A) |
+| project rst_n | 1 |
+| ctrl_sel_rst_n / ctrl_sel_inc / ctrl_ena | 2 / 3 / 4 |
+| uo_out[0..3] / uo_out[4..7] | 5-8 / 13-16 |
+| ui_in[0..3] / ui_in[4..7] | 9-12 / 17-20 |
+| uio[0..7] | 21-28 |
+| cpu8: CS_N, MOSI, MISO, SCK, HALTED | uio0-4 = 21, 22, 23, 24, 25 |
+
+- **TT04/TT05 boards are not supported.** They route rst_n and the mux control lines through an on-board analog mux that is shared with uo_out[0..3].
+- **TT07 chips:** the TT07 carrier board swaps ctrl_sel_inc and ctrl_sel_rst_n. Set `TT07_CB_FIX 1` in `pinmap.h`.
+- **Newer boards use an RP2350, not an RP2040.** The current "TT DB v3" / ETR demo board has an RP2350B, and since January 2026 the official firmware supports only that board. Its map is in a comment at the end of `pinmap.h`: clk 16, rst_n 14, ctrl 0/1/2, ui_in 17-24, uio 25-32, uo_out 33-40. The relative uio layout is the same, so the PIO changes below still apply. The port itself is not done. It needs `PICO_PLATFORM=rp2350`, its own memory map for the emulated RAM, and uo_out read from the high GPIO bank. **Check which board your shuttle ships with.** A future shuttle will most likely come with DB v3.
+
+**Project selection** copies `ProjectMux.reset_and_clock_mux()` from the TT firmware:
+1. Set ctrl_ena=0 and ctrl_sel_rst_n=0, wait 10 ms.
+2. Set ctrl_sel_rst_n=1, wait 10 ms.
+3. Pulse ctrl_sel_inc `addr` times (1 ms high, 1 ms low).
+4. Set ctrl_ena=1.
+
+Selection takes about 20 ms + 2 ms × addr. Your project address is in the shuttle's project list (TT index / `info.yaml` of the shuttle repo).
+
+**Reset:** rst_n is driven low to reset. To release it, the firmware drives it high briefly and then makes the pin an input, so the board's pull-up and reset button work as with the TT firmware. cpu8's reset is synchronous, so `GO` keeps reset low for at least 1 ms with the clock running.
+
+**ui_in:** the RP2040 drives ui_in only after `SEL` or `ATTACH`. Set the demo board's ui_in DIP switches to OFF so they do not fight the RP2040. Please check this against your board's schematic.
+
+## spi-ram-emu: changes and why
+
+Upstream needs `SCK = MOSI + 1` and `CS = MOSI + 2`. cpu8's pins (CS=uio0, MOSI=uio1, MISO=uio2, SCK=uio3) give GPIO 21/22/23/24, so SCK = MOSI + 2 and CS = MOSI − 1, which **does not fit upstream**. MOSI must be the PIO IN base because of `in pins, 1`. So the copy here makes these changes, each marked `cpu8 change` in the source:
+
+1. **Pin offsets.** The `wait pin` indexes in `sram.pio` come from `.define SRAM_SCK_OFS 2` and `SRAM_CS_OFS 31`. PIO input pin indexes wrap modulo 32, so index 31 from base 22 is GPIO 21. `sram.c` checks these against `pinmap.h` with `_Static_assert`. The init functions take each pin separately. CS, MOSI and SCK stay plain SIO inputs, because PIO can read any GPIO.
+2. **MISO is not driven until the project is selected** (`sram_drive_miso()`). While another project is selected, its uio2 could be an output.
+3. **MISO changes after the falling SCK edge, not the rising one.** Upstream shifts out right after the rising edge. That is valid for a master that samples on the rising edge. cpu8 samples MISO at the end of the SCK high phase (`src/cpu.v`, for pad-delay tolerance), so with upstream timing it would read the next bit. At 10 MHz the half period is 100 ns, while the emulator updates MISO roughly 30-60 ns after the edge. With the change the emulator behaves like a real 23LC512 and like `model/spi_ram_model.v`, which the cocotb tests use. As a side effect the first data bit gets half an SCK period more time. FAST READ keeps working.
+4. **Linker.** Upstream's `sram_memmap.ld` targets pico-sdk 1.x. It is replaced by sdk 2.x overrides (`RAM_LENGTH=0x30000`, plus an `SPI_RAM` region at 0x20030000 and a `.spi_ram` section).
+
+## Timing limits (read this before choosing a clock)
+
+- **SCK limit:** spi-ram-emu READ works up to SCK = sys/10. cpu8 uses SCK = clk/2, so clk ≤ sys/5. The firmware rejects faster clocks. At the default 200 MHz system clock that is 40 MHz. The firmware runs the RP2040 at 200 MHz (`SYS_CLK_MHZ=200`, core at 1.15 V, flash at sys/4).
+- **CS re-arm time.** After CS goes high, core1 has to abort the DMA and restart both state machines before the next transaction's first SCK edge. The core1 re-arm path is about 40 instructions in the disassembly, roughly 50–65 cycles, plus input synchronisers and DMA abort latency. Michael Bell's README also estimates "around 50 SYS clocks". At 200 MHz that is about 300 ns.
+  - cpu8 used to keep CS high for only 1–2 clocks, too short at 10 MHz. `src/cpu.v` now holds CS high for **at least 8 clocks** between transactions (`CS_GAP`): 800 ns at 10 MHz, or about 160 RP2040 clocks at 200 MHz. That leaves a good margin, so 10 MHz is the default.
+  - This is still the first thing to suspect if the CPU misbehaves on the board. Try a lower `-f` to check.
+- uo_out streaming (`MON 1`) samples the pins in the core0 loop. Changes faster than the loop plus USB can carry are merged, and you see the latest value.
+
+## Protocol
+
+USB CDC, ASCII lines ending in `\n` (`\r` is also accepted). The firmware sends `\r\n`. Commands are case-insensitive. Numbers are decimal, or hex with `0x`. Data bytes are hex digit pairs, so binary payloads are safe.
+
+Every non-empty command line gets **exactly one** final reply: `OK [result]` or `ERR <reason>`. Empty lines get no reply. A host can resynchronise by sending `\n`, discarding input and sending `PING`. Two other kinds of line can appear at any time, and a host must skip them while it waits for its reply:
+
+- `# text`: help text (sent before `HELP`'s `OK`)
+- `EV ...`: monitor events, only while `MON 1` is on and the project is out of reset:
+  - `EV UO <hex> <us>`: uo_out changed; time in µs since `GO`
+  - `EV HALT <us>`: HALTED went high
+
+| Command | Reply | Notes |
+|---------|-------|-------|
+| `PING` | `OK cpu8-loader 1` | the last number is the protocol version |
+| `ST` | `OK uo=XX halted=0/1 rst=0/1 clk=<Hz> ui=XX sel=<addr or -1> sys=<Hz> mon=0/1 t=<us>` | t = µs since GO (0 in reset; wraps after 71 min) |
+| `SEL addr` | `OK` | 0..1023. Holds reset, floats ui_in/MISO, runs the mux sequence, then drives ui_in and MISO |
+| `ATTACH` / `DETACH` | `OK` | drive or float ui_in and MISO without selecting a project (for example when it is already selected) |
+| `RST` | `OK` | hold rst_n low |
+| `GO` | `OK` | rst_n low for ≥ max(1 ms, 10 clocks), then release. `ERR` if the clock is stopped |
+| `CLK hz` | `OK <actual Hz>` | PWM on the clk pin: sys / (div × period), so for example 9.5 MHz gives 9523809. `0` stops it (pin low). `ERR` above sys/5 or below about 12 Hz |
+| `UI val` | `OK` | 0..255 |
+| `W addr hex` | `OK <n>` | write up to 128 bytes |
+| `R addr len` | `OK <hex>` | read 1..128 bytes |
+| `FILL addr len val` | `OK` | for example `FILL 0 4096 0` |
+| `MON 0/1` | `OK` | uo_out/HALT event streaming |
+| `SYSCLK khz` | `OK sys=<Hz> clk=<Hz>` | 50000..250000. Holds reset, then sets the clock up again if it still fits. Uses 1.20 V above 200 MHz |
+| `HELP` | `# ...` lines, then `OK` | |
+| `BOOT` | `OK` | then reboots into the UF2 bootloader |
+
+Addresses cover the whole 64 KB emulated RAM. cpu8 only sees 0x0000-0x0FFF and keeps its stack at 0xF00-0xFFF. RAM can be written and read while the CPU runs. That is useful for peeking at results, but it is not synchronised with the CPU.
+
+The `cpu8load` sequence is: `PING`, [`SYSCLK`], `RST`, `SEL p` or `ATTACH`, `FILL 0 4096 0`, then `W` in 128-byte chunks, then `R` to read everything back and verify, `CLK f`, `UI v`, [`MON 1`], `GO`. Then it polls `ST` and/or follows `EV` lines until HALTED or the timeout, then `ST`, [`MON 0`], and `R` for each `-r` dump.
+
+## Testing without hardware
+
+```
+cd mock && make test
+```
+
+`cpu8mock` is the firmware's real `proto.c` linked with `hw_mock.c` on a pseudo-terminal. Its fake CPU does not run cpu8 code. Once out of reset it counts uo_out 1..5 (one step per 20 ms). Then it stores `ui_in ^ 0xFF` at 0xFFE and the 8-bit sum of RAM 0..0xEFF at 0xFFF, and raises HALTED at 100 ms. `test.sh` runs `cpu8load` against it: options, error messages, upload and verify, `-w`, `-m`, `-r`, clock rounding and `SYSCLK`. It also runs raw protocol checks for the error replies. To try it by hand:
+
+```
+./cpu8mock -l /tmp/cpu8tty &  ./cpu8load -d /tmp/cpu8tty -p 5 -w -m -r 0xFF0:16 prog.bin
+```
+
+The firmware itself has only been built, never run on a board. The pin map, mux sequence, PIO changes and timing analysis above are untested on hardware.

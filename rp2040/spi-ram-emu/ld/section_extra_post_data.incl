@@ -1,0 +1,8 @@
+/* cpu8 change: emulated SPI RAM (see memory_extra.incl) */
+SECTIONS
+{
+    .spi_ram (NOLOAD) : {
+        . = ALIGN(4);
+        *(.spi_ram*)
+    } > SPI_RAM
+}

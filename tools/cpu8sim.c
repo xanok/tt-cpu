@@ -6,8 +6,9 @@
  *
  * Loads the raw image at address 0 (rest of the 4 KB memory is zero), runs
  * until HLT and prints every value written by OUT. The clock count follows
- * the RTL (src/cpu.v) exactly: 83 clocks per instruction, plus 65 for a
- * 1-byte memory access, 81 for CALL/RET and 17 per STRLEN character.
+ * the RTL (src/cpu.v) exactly: 88 clocks per instruction, plus 72 for a
+ * 1-byte memory access, 88 for CALL/RET, and 73 + 17 per character for
+ * STRLEN. Each SPI transaction is followed by 8 clocks with CS high.
  */
 #include <ctype.h>
 #include <stdio.h>
@@ -17,9 +18,10 @@
 #include "cpu8isa.h"
 
 /* clock counts, derived from the RTL state machine */
-#define CLK_INSTR  83   /* FETCH 1 + 40-bit SPI read 80 + FWAIT exit 1 + EXEC 1 */
-#define CLK_MEM1   65   /* 32-bit SPI transaction 64 + MWAIT exit 1 */
-#define CLK_MEM2   81   /* 40-bit SPI transaction (CALL, RET) */
+#define CLK_INSTR  88   /* 40-bit SPI fetch (80) + 8 clocks CS high */
+#define CLK_MEM1   72   /* 32-bit SPI transaction (64) + 8 clocks CS high */
+#define CLK_MEM2   88   /* 40-bit SPI transaction (CALL, RET) + 8 */
+#define CLK_STRLEN 73   /* STRLEN raises CS one clock later than the others */
 #define CLK_STRCH  17   /* each extra STRLEN byte: 16 SPI clocks + 1 */
 
 struct cpu {
@@ -142,7 +144,8 @@ static int step(struct cpu *s)
         case 0x2: s->c = s->a >> 7; s->a <<= 1; set_z(s, s->a); break;      /* SHL */
         case 0x3: s->c = s->a & 1; s->a >>= 1; set_z(s, s->a); break;       /* SHR */
         case 0x4: s->a = ~s->a; set_z(s, s->a); break;                      /* NOT */
-        case 0x5: s->halted = 1; break;                                     /* HLT */
+        case 0x5: s->halted = 1;                                            /* HLT */
+                  s->clocks -= 5; break;  /* halts before the CS gap ends */
         case 0x6: s->x = s->a; set_z(s, s->x); break;                       /* TAX */
         case 0x7: s->a = s->x; set_z(s, s->a); break;                       /* TXA */
         case 0x8: s->x++; set_z(s, s->x); break;                            /* INX */
@@ -159,7 +162,7 @@ static int step(struct cpu *s)
         break;
     case 0xF: { /* STRLEN: count bytes until NUL, max 255 */
         unsigned n = 0;
-        s->clocks += CLK_MEM1;
+        s->clocks += CLK_STRLEN;
         while (n < 255 && rd(s, ea + n) != 0) {
             n++;
             s->clocks += CLK_STRCH;

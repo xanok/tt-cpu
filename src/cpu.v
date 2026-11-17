@@ -80,8 +80,16 @@ module cpu8 (
                   op != OP_JC  && op != OP_JNZ) || m_push || m_pop || m_ret;
 
   // ---------------- transaction request (one shared start path) ----------------
+  // CS must stay high for at least CS_GAP+1 clocks between transactions:
+  // spi-ram-emu on the RP2040 needs ~50 of its clocks to re-arm after CS
+  // rises (8 clocks = 800 ns at 10 MHz). A transaction that would start
+  // earlier waits in its state.
+  localparam CS_GAP = 3'd7;
+  reg  [2:0]  gap;
+  wire        t_want  = (state == S_FETCH) || (state == S_EXEC && mem_op);
+  wire        stall   = t_want && (gap != 3'd0);
   wire        t_fetch = (state == S_FETCH);
-  wire        t_go    = t_fetch || (state == S_EXEC && mem_op);
+  wire        t_go    = t_want && !stall;
   wire        t_wr    = !t_fetch && write;
   wire        t_two   = t_fetch || is_call || m_ret;        // 2 data bytes
   wire [11:0] t_addr  = t_fetch ? pc : maddr;
@@ -148,6 +156,7 @@ module cpu8 (
       spi_cs_n <= 1'b1;
       spi_sck  <= 1'b0;
       tx       <= 40'd0;
+      gap      <= 3'd0;
       rx       <= 16'd0;
       bitcnt   <= 6'd0;
       lastbit  <= 6'd0;
@@ -167,8 +176,11 @@ module cpu8 (
             busy <= 1'b0;
             // STRLEN keeps CS low so the RAM keeps streaming sequential bytes
             if (state != S_STRL) spi_cs_n <= 1'b1;
+            if (state != S_STRL) gap <= CS_GAP;
           end
         end
+      end else if (gap != 3'd0) begin
+        gap <= gap - 3'd1;
       end
 
       if (t_go) begin
@@ -179,7 +191,7 @@ module cpu8 (
         spi_cs_n <= 1'b0;
       end
 
-      case (state)
+      if (!stall) case (state)
         S_FETCH: state <= S_FWAIT;
 
         S_FWAIT: if (!busy) begin
@@ -258,6 +270,7 @@ module cpu8 (
         S_STRL: if (!busy) begin
           if (rx[7:0] == 8'd0 || a == 8'hFF) begin
             spi_cs_n <= 1'b1;
+            gap      <= CS_GAP;
             zf       <= (a == 8'd0);
             cf       <= (rx[7:0] != 8'd0);  // no NUL within 255 bytes
             state    <= S_FETCH;
