@@ -30,3 +30,5 @@ test/fuzz/fail_*.bin
 rp2040/emutest/node_modules/
 rp2040/emutest/build/
 tools/cpu8dis
+# quick start output (README)
+/*.bin
