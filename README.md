@@ -68,6 +68,7 @@ Toolchain for the Verilog tests and the FPGA: `source ~/tools/oss-cad-suite/envi
 | Examples in the simulator | `programs/run_tests.sh` |
 | Chip Verilog, including every example against the simulator | `cd test && make` (waveform: `gtkwave tb.fst`) |
 | Same, with the MISO_RISE strap high and stock spi-ram-emu RAM timing | `cd test && make MISO_RISE=yes` |
+| Random programs on the Verilog against the instruction model, both sampling modes | `cd test/fuzz && make` (`N=20000 SEED=7` for more; `make coverage` for line/toggle coverage) |
 | Loader and firmware protocol on the mock demo board | `cd rp2040/mock && make test` |
 | FPGA top: UART output against the simulator | `cd fpga && make sim PROG=../programs/hello.asm` |
 
