@@ -4,7 +4,7 @@
 ;
 ;   LDI >msg         ; string address: A = high byte
 ;   LDX <msg         ;                 X = low byte
-;   CALL print       ; NUL-terminated, up to 255 characters
+;   CALL print       ; NUL-terminated, any length
 ;
 ;   LDA value
 ;   CALL print_dec   ; A as decimal, no leading zeros (0..255)
@@ -15,16 +15,12 @@
 ; .include this file after your program's last instruction (it is code).
 
 ; print the NUL-terminated string at address {A, X}
-print:  ORI 0x50            ; opcode of "LDA ea,X" with the high address nibble
-        STA pr_ld
-        TXA
-        STA pr_ld+1         ; low address byte
-        LDX 0
-pr_ld:  LDA 0,X             ; patched above
+print:  TAXH                ; X = the 12-bit address
+pr_ld:  LDA 0,X
         JZ  pr_end
         OUT
         INX
-        JNZ pr_ld           ; stop after 255 characters
+        JMP pr_ld
 pr_end: RET
 
 newline:

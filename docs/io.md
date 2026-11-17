@@ -62,7 +62,7 @@ Text is just `OUT` bytes shown as characters. `programs/lib/print.asm` has the r
 
 | Routine | Does | Arguments |
 |---------|------|-----------|
-| `print` | prints a NUL-terminated string, up to 255 characters | A = high byte of the address, X = low byte |
+| `print` | prints a NUL-terminated string of any length | A = high byte of the address, X = low byte |
 | `print_dec` | prints a number in decimal, no leading zeros | A = value (0..255) |
 | `print_hex` | prints a number as two hex digits | A = value |
 | `newline` | prints `\n` | none |

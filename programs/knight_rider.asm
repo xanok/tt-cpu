@@ -18,15 +18,15 @@ right:  OUT
 
 ; about 131k instructions (~0.4 s at 27 MHz)
 delay:  PUSH
-        LDI 0
+        LDI 16
         STA dcnt
 douter: LDX 0
-dinner: DEX             ; 256 iterations
+dinner: DEX             ; 4096 iterations (X is 12 bits)
         JNZ dinner
         LDA dcnt
         SBI 1
         STA dcnt
-        JNZ douter      ; 256 iterations
+        JNZ douter      ; 16 iterations
         POP
         RET
 

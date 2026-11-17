@@ -8,7 +8,7 @@ An 8-bit CPU (accumulator, index register X, stack with CALL/RET) that runs from
 |----------|---------------|
 | [docs/isa.md](docs/isa.md) | instruction set, stack, timing, assembler syntax |
 | [docs/io.md](docs/io.md) | input and output: `OUT`, `IN`, text output, keyboard input, on every platform |
-| [programs/README.md](programs/README.md) | the 24 example programs and the two libraries |
+| [programs/README.md](programs/README.md) | the 25 example programs and the two libraries |
 | [rp2040/README.md](rp2040/README.md) | demo board firmware for the RP2350B and RP2040 boards: build, pin maps, serial protocol, timing limits |
 | [docs/bench.md](docs/bench.md) | hardware test before tapeout: Tang Nano 20K as the chip, Pico 2 as the demo board, wiring table |
 | [docs/info.md](docs/info.md) | the Tiny Tapeout datasheet page: pins, strap, reset |
@@ -42,7 +42,7 @@ src/            chip RTL (only these go to tapeout)
   cpu.v           the CPU core + SPI master
 model/          SPI RAM model: testbench memory AND on-FPGA block RAM
 tools/          C tools: cpu8asm (assembler), cpu8sim (simulator), cpu8dis (disassembler), cpu8load (demo board loader)
-programs/       24 example programs, lib/print.asm and lib/input.asm, run_tests.sh
+programs/       25 example programs, lib/print.asm and lib/input.asm, run_tests.sh
 rp2040/         demo board firmware (RP2350B and RP2040): SPI RAM emulator + USB loader; mock/ tests it on a PC
 test/           cocotb tests (TT CI runs these)
 fpga/           Tang Nano 20K top, UART in/out, pin constraints, Makefile

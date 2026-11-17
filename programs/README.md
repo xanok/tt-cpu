@@ -8,6 +8,7 @@ Each program's header comments hold its expected output. `./run_tests.sh` assemb
 | `count.asm` | simplest loop, `CPI` |
 | `sum_array.asm` | `ADD ea,X`, 16-bit sum with carry |
 | `add16.asm` | `ADC` / `SBC`, 16-bit add and subtract without a branch |
+| `pointer.asm` | 12-bit X as a pointer: table of string addresses, 300-byte block |
 | `fibonacci.asm` | stop on carry |
 | `multiply.asm` | 8×8→16 shift-and-add subroutine (`CALL`/`RET`) |
 | `divide.asm` | restoring division subroutine; saves X with `PUSH`/`POP` |

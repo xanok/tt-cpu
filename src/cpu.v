@@ -2,7 +2,7 @@
  * cpu8 - tiny 8-bit accumulator CPU with an SPI memory bus
  * SPDX-License-Identifier: Apache-2.0
  *
- * - Accumulator A, index register X, stack pointer SP, flags Z and C,
+ * - Accumulator A, 12-bit index register X, stack pointer SP, flags Z and C,
  *   12-bit PC (4 KB address space). The stack lives in page 0xF
  *   (0xF00-0xFFF) and grows down from 0xFFF.
  * - Code and data share one external SPI RAM (23LC512-style, mode 0,
@@ -38,13 +38,13 @@ module cpu8 (
   // immediate group (op 0), selected by hi
   localparam I_LDI = 4'h0, I_ADI = 4'h1, I_SBI = 4'h2, I_ANI = 4'h3,
              I_ORI = 4'h4, I_XRI = 4'h5, I_CPI = 4'h6, I_LDX = 4'h7,
-             I_CPX = 4'h8, I_ADC = 4'h9, I_SBC = 4'hA;
+             I_CPX = 4'h8, I_ADC = 4'h9, I_SBC = 4'hA, I_LXH = 4'hB;
 
   // misc group (op D), selected by hi
   localparam M_OUT = 4'h0, M_IN  = 4'h1, M_SHL = 4'h2, M_SHR = 4'h3,
              M_NOT = 4'h4, M_HLT = 4'h5, M_TAX = 4'h6, M_TXA = 4'h7,
              M_INX = 4'h8, M_DEX = 4'h9, M_PSH = 4'hA, M_POP = 4'hB,
-             M_RET = 4'hC;
+             M_RET = 4'hC, M_TXH = 4'hD, M_THA = 4'hE;  // TAXH, TXHA
 
   localparam S_FETCH = 3'd0,  // start 2-byte read at PC
              S_FWAIT = 3'd1,  // wait for instruction bytes
@@ -64,7 +64,8 @@ module cpu8 (
 
   reg  [2:0]  state;
   reg  [11:0] pc;
-  reg  [7:0]  a, x, sp;
+  reg  [7:0]  a, sp;
+  reg  [11:0] x;       // index register: a full address
   reg         zf, cf;
   reg  [7:0]  ir, arg;
 
@@ -83,7 +84,7 @@ module cpu8 (
   // ---------------- address generation ----------------
   // One adder for SP: CALL -2, PUSH -1, POP +1, RET +2. Pushes pre-decrement.
   wire [7:0]  sp_new = sp + (is_call ? 8'hFE : m_push ? 8'hFF : m_ret ? 8'h02 : 8'h01);
-  wire [11:0] maddr  = indexed            ? ea + {4'h0, x} :
+  wire [11:0] maddr  = indexed            ? ea + x :
                        (m_push | is_call) ? {4'hF, sp_new} :
                        (m_pop  | m_ret)   ? {4'hF, sp} : ea;
 
@@ -136,7 +137,8 @@ module cpu8 (
     endcase
   end
 
-  wire [7:0] lhs = (op == OP_IMM && hi == I_CPX) ? x : a;
+  wire [7:0] lhs = (op == OP_IMM && hi == I_CPX) ? x[7:0] : a;
+  wire       xh0 = (x[11:8] == 4'd0);  // CPX compares all of X with the 8-bit immediate
   wire [7:0] b   = (state == S_MWAIT) ? rx[7:0] : arg;
   // One adder for add, subtract and compare, with a carry input:
   //   add: lhs + b + cin          subtract: lhs + ~b + !cin  (= lhs - b - cin)
@@ -158,14 +160,14 @@ module cpu8 (
   end
   wire alu_z = (alu[7:0] == 8'd0);
 
-  wire [7:0] x_step = x + ((hi == M_DEX) ? 8'hFF : 8'h01);  // INX / DEX
+  wire [11:0] x_step = x + ((hi == M_DEX) ? 12'hFFF : 12'h001);  // INX / DEX
 
   always @(posedge clk) begin
     if (!rst_ni) begin
       state    <= S_FETCH;
       pc       <= 12'd0;
       a        <= 8'd0;
-      x        <= 8'd0;
+      x        <= 12'd0;
       sp       <= 8'd0;
       zf       <= 1'b0;
       cf       <= 1'b0;
@@ -237,14 +239,19 @@ module cpu8 (
                 cf <= alu[8];
                 zf <= alu_z;
               end
-              I_CPI, I_CPX: begin
+              I_CPI: begin
                 cf <= alu[8];
                 zf <= alu_z;
               end
+              I_CPX: begin  // X >= 256 is above any immediate: no borrow, not equal
+                cf <= alu[8] & xh0;
+                zf <= alu_z  & xh0;
+              end
               I_LDX: begin
-                x  <= arg;
+                x  <= {4'h0, arg};
                 zf <= (arg == 8'd0);
               end
+              I_LXH: x[11:8] <= arg[3:0];  // LDXH: flags kept
               default: ;  // reserved: NOP
             endcase
             OP_LDA, OP_STA, OP_ADD, OP_SUB, OP_CMP, OP_LDX, OP_STX, OP_ADX,
@@ -270,9 +277,11 @@ module cpu8 (
               M_SHR: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end
               M_NOT: begin a <= ~a; zf <= (a == 8'hFF); end
               M_HLT: state <= S_HALT;
-              M_TAX: begin x <= a; zf <= (a == 8'd0); end
-              M_TXA: begin a <= x; zf <= (x == 8'd0); end
-              M_INX, M_DEX: begin x <= x_step; zf <= (x_step == 8'd0); end
+              M_TAX: begin x <= {4'h0, a}; zf <= (a == 8'd0); end
+              M_TXA: begin a <= x[7:0]; zf <= (x[7:0] == 8'd0); end
+              M_INX, M_DEX: begin x <= x_step; zf <= (x_step == 12'd0); end
+              M_TXH: x[11:8] <= a[3:0];  // TAXH: flags kept
+              M_THA: begin a <= {4'h0, x[11:8]}; zf <= xh0; end  // TXHA
               M_PSH, M_POP, M_RET: begin
                 state <= S_MWAIT;
                 sp    <= sp_new;

@@ -198,7 +198,7 @@ int main(int argc, char **argv)
         feed_input(&s);
         int out = step(&s);
         if (trace)
-            fprintf(stderr, "%03X  %-17s  %02X %02X %02X %d %d\n", at, dis, s.a, s.x, s.sp, s.z, s.c);
+            fprintf(stderr, "%03X  %-17s  %02X %03X %02X %d %d\n", at, dis, s.a, s.x, s.sp, s.z, s.c);
         if (out >= 0 && !quiet) {
             if (text)
                 putchar(out);
@@ -220,7 +220,7 @@ int main(int argc, char **argv)
     }
     if (summary || !s.halted)
         fprintf(stderr, "%s after %llu instructions, %llu clocks (%.3f ms at %.1f MHz)\n"
-                        "A=%02X X=%02X SP=%02X Z=%d C=%d PC=%03X OUT=%02X\n",
+                        "A=%02X X=%03X SP=%02X Z=%d C=%d PC=%03X OUT=%02X\n",
                 s.halted ? "halted" : "instruction limit reached", s.instrs, s.clocks,
                 s.clocks * 1000.0 / hz, hz / 1e6, s.a, s.x, s.sp, s.z, s.c, s.pc, s.out);
     return s.halted ? 0 : 3;

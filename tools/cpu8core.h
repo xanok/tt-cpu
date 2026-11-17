@@ -20,7 +20,8 @@
 struct cpu {
     unsigned char mem[CPU8_MEM_SIZE];
     unsigned pc;          /* 12 bits */
-    unsigned char a, x, sp, z, c;
+    unsigned char a, sp, z, c;
+    unsigned short x;     /* 12 bits */
     unsigned char out, in;
     int halted;
     unsigned long long instrs, clocks;
@@ -63,10 +64,11 @@ static inline int step(struct cpu *s)
         case 0x4: s->a |= lo; set_z(s, s->a); break;                        /* ORI */
         case 0x5: s->a ^= lo; set_z(s, s->a); break;                        /* XRI */
         case 0x6: s->c = s->a < lo; set_z(s, (unsigned char)(s->a - lo)); break; /* CPI */
-        case 0x7: s->x = lo; set_z(s, s->x); break;                         /* LDX */
-        case 0x8: s->c = s->x < lo; set_z(s, (unsigned char)(s->x - lo)); break; /* CPX */
+        case 0x7: s->x = lo; s->z = (lo == 0); break;                       /* LDX */
+        case 0x8: s->c = s->x < lo; s->z = (s->x == lo); break;             /* CPX: all 12 bits */
         case 0x9: r = s->a + lo + s->c; s->c = r > 0xFF; s->a = r; set_z(s, s->a); break; /* ADC */
         case 0xA: r = s->a - lo - s->c; s->c = (r >> 8) & 1; s->a = r; set_z(s, s->a); break; /* SBC */
+        case 0xB: s->x = (s->x & 0xFF) | ((lo & 0xF) << 8); break;          /* LDXH */
         default: break;                                                     /* reserved */
         }
         break;
@@ -119,10 +121,12 @@ static inline int step(struct cpu *s)
         case 0x4: s->a = ~s->a; set_z(s, s->a); break;                      /* NOT */
         case 0x5: s->halted = 1;                                            /* HLT */
                   s->clocks -= 5; break;  /* halts before the CS gap ends */
-        case 0x6: s->x = s->a; set_z(s, s->x); break;                       /* TAX */
-        case 0x7: s->a = s->x; set_z(s, s->a); break;                       /* TXA */
-        case 0x8: s->x++; set_z(s, s->x); break;                            /* INX */
-        case 0x9: s->x--; set_z(s, s->x); break;                            /* DEX */
+        case 0x6: s->x = s->a; set_z(s, s->a); break;                       /* TAX */
+        case 0x7: s->a = s->x & 0xFF; set_z(s, s->a); break;                /* TXA */
+        case 0x8: s->x = (s->x + 1) & 0xFFF; s->z = (s->x == 0); break;     /* INX */
+        case 0x9: s->x = (s->x - 1) & 0xFFF; s->z = (s->x == 0); break;     /* DEX */
+        case 0xD: s->x = (s->x & 0xFF) | ((s->a & 0xF) << 8); break;        /* TAXH */
+        case 0xE: s->a = s->x >> 8; set_z(s, s->a); break;                  /* TXHA */
         case 0xA: s->sp--; wr(s, CPU8_STACK_PAGE + s->sp, s->a);            /* PUSH */
                   s->clocks += CLK_MEM1; break;
         case 0xB: s->a = rd(s, CPU8_STACK_PAGE + s->sp); s->sp++;           /* POP */

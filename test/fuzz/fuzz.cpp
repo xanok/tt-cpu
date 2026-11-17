@@ -89,7 +89,7 @@ static void make_program(unsigned char *m, int mode)
         unsigned r = rnd_n(100), ea = pick_addr(), imm = rnd_n(4) ? rnd() & 0xFF : (rnd_n(2) ? 0 : 0xFF);
         static const unsigned mem_ops[] = {1, 2, 3, 4, 5, 6, 7, 0xE};
         if (r < 22) {                                   // immediate group
-            put_instr(m, at, rnd_n(10) ? rnd_n(11) : rnd_n(16), imm);
+            put_instr(m, at, rnd_n(10) ? rnd_n(12) : rnd_n(16), imm);
         } else if (r < 52) {                            // memory access
             put_instr(m, at, mem_ops[rnd_n(8)] << 4 | ea >> 8, ea);
         } else if (r < 60) {                            // CALL forward / anywhere in code
@@ -121,9 +121,9 @@ struct result { int ok; uint64_t instrs, clocks, resets; int halted; };
 static int fail(const char *what, const struct cpu *s, unsigned long long n)
 {
     fprintf(stderr, "MISMATCH %s after %llu instructions\n", what, n);
-    fprintf(stderr, "  model: PC=%03X A=%02X X=%02X SP=%02X Z=%d C=%d OUT=%02X\n",
+    fprintf(stderr, "  model: PC=%03X A=%02X X=%03X SP=%02X Z=%d C=%d OUT=%02X\n",
             s->pc, s->a, s->x, s->sp, s->z, s->c, s->out);
-    fprintf(stderr, "  RTL:   PC=%03X A=%02X X=%02X SP=%02X Z=%d C=%d OUT=%02X state=%d\n",
+    fprintf(stderr, "  RTL:   PC=%03X A=%02X X=%03X SP=%02X Z=%d C=%d OUT=%02X state=%d\n",
             CORE(pc), CORE(a), CORE(x), CORE(sp), CORE(zf), CORE(cf), top->uo_out, CORE(state));
     return 0;
 }
@@ -169,7 +169,7 @@ static struct result run(const unsigned char *image, unsigned ui, unsigned max_i
             outs++;
         res.instrs++;
         if (verbose)
-            fprintf(stderr, "%6llu  PC=%03X A=%02X X=%02X SP=%02X Z=%d C=%d\n",
+            fprintf(stderr, "%6llu  PC=%03X A=%02X X=%03X SP=%02X Z=%d C=%d\n",
                     (unsigned long long)res.instrs, model.pc, model.a, model.x, model.sp, model.z, model.c);
         if (CORE(pc) != model.pc || CORE(a) != model.a || CORE(x) != model.x ||
             CORE(sp) != model.sp || CORE(zf) != model.z || CORE(cf) != model.c) {

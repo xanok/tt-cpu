@@ -388,6 +388,78 @@ dst:    .byte 0, 0, 0, 0
 
 
 @cocotb.test()
+async def test_x_12bit(dut):
+    """X is 12 bits: LDXH / TAXH / TXHA, INX / DEX across 0xFF, CPX on all bits."""
+    await boot(dut, """
+        LDX 0xFF
+        INX             ; 0x100: not zero
+        JZ  fail
+        TXA             ; low byte 0: Z
+        JNZ fail
+        TXHA            ; 1
+        STA r0
+        LDA 0x400,X     ; M[0x500]
+        STA r1
+        DEX             ; 0x0FF
+        TXHA            ; 0: Z
+        JNZ fail
+        LDX 0
+        DEX             ; 0xFFF
+        JZ  fail
+        TXHA
+        STA r2          ; 0x0F
+        LDA 0x501,X     ; wraps at 4 KB: M[0x500]
+        STA r3
+        INX             ; 0: Z
+        JNZ fail
+        LDX 0x34
+        LDXH 0xA5       ; only 4 bits: X = 0x534
+        LDI 0x77
+        STA 0,X         ; M[0x534]
+        CPX 0x34        ; X is 0x534, above any immediate: no Z, no C
+        JZ  fail
+        JC  fail
+        LDXH 0
+        CPX 0x34        ; equal
+        JNZ fail
+        CPX 0x35        ; below: C
+        JC  c1
+        JMP fail
+c1:     LDI 0xF6        ; pointer from two bytes, A = high
+        LDX 0x02
+        TAXH            ; X = 0x602, flags kept
+        JC  c2
+        JMP fail
+c2:     LDA 0,X         ; M[0x602]
+        STA r4
+        LDI 9
+        TAX             ; TAX clears the high bits
+        TXHA
+        JNZ fail
+        LDI 0x5A
+        OUT
+        HLT
+fail:   LDI 0xEE
+        OUT
+        HLT
+        .org 0x200
+r0:     .byte 0
+r1:     .byte 0
+r2:     .byte 0
+r3:     .byte 0
+r4:     .byte 0
+        .org 0x500
+        .byte 0xC3
+        .org 0x602
+        .byte 0x3C
+""")
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 0x5A
+    assert [mem(dut, 0x200 + i) for i in range(5)] == [1, 0xC3, 0x0F, 0xC3, 0x3C]
+    assert mem(dut, 0x534) == 0x77
+
+
+@cocotb.test()
 async def test_call_ret_stack(dut):
     """Nested CALLs, PUSH/POP and the return addresses in the stack page."""
     await boot(dut, """

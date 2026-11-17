@@ -38,7 +38,7 @@ static const struct cpu8_op cpu8_ops[] = {
     {"LDI", 0x00, K_IMM}, {"ADI", 0x01, K_IMM}, {"SBI", 0x02, K_IMM},
     {"ANI", 0x03, K_IMM}, {"ORI", 0x04, K_IMM}, {"XRI", 0x05, K_IMM},
     {"CPI", 0x06, K_IMM}, {"LDX", 0x07, K_IMM}, {"CPX", 0x08, K_IMM},
-    {"ADC", 0x09, K_IMM}, {"SBC", 0x0A, K_IMM},
+    {"ADC", 0x09, K_IMM}, {"SBC", 0x0A, K_IMM}, {"LDXH", 0x0B, K_IMM},
     /* 12-bit address */
     {"LDA", 0x1, K_ADDR}, {"STA", 0x2, K_ADDR}, {"ADD", 0x3, K_ADDR},
     {"SUB", 0x4, K_ADDR},
@@ -51,7 +51,8 @@ static const struct cpu8_op cpu8_ops[] = {
     {"SHR", 0xD3, K_NONE}, {"NOT", 0xD4, K_NONE}, {"HLT", 0xD5, K_NONE},
     {"TAX", 0xD6, K_NONE}, {"TXA", 0xD7, K_NONE}, {"INX", 0xD8, K_NONE},
     {"DEX", 0xD9, K_NONE}, {"PUSH", 0xDA, K_NONE}, {"POP", 0xDB, K_NONE},
-    {"RET", 0xDC, K_NONE}, {"NOP", 0xDF, K_NONE},
+    {"RET", 0xDC, K_NONE}, {"TAXH", 0xDD, K_NONE}, {"TXHA", 0xDE, K_NONE},
+    {"NOP", 0xDF, K_NONE},
 };
 
 #define CPU8_NOPS (sizeof cpu8_ops / sizeof cpu8_ops[0])

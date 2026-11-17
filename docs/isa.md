@@ -2,7 +2,7 @@
 
 Registers:
 - `A`: 8-bit accumulator;
-- `X`: 8-bit index register;
+- `X`: 12-bit index register, wide enough to hold any address;
 - `SP`: 8-bit stack pointer;
 - `PC`: 12-bit program counter;
 - flags `Z` (zero) and `C` (carry / borrow).
@@ -32,7 +32,7 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 | E | `CMP ea`    | flags of A − M[ea], A unchanged | Z, C |
 | F | `STRLEN ea` | A = length of the NUL-terminated string at ea (max 255) | Z = empty, C = no NUL within 255 bytes |
 
-`ea + X` is a 12-bit add, so an indexed access can cross a 256-byte page. It wraps at 4 KB.
+`ea + X` is a 12-bit add that wraps at 4 KB. Since X is 12 bits, `LDA 0,X` reads the byte X points to, anywhere in memory.
 
 ### Immediate group (op 0)
 
@@ -45,11 +45,12 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 | 04 | `ORI imm` | A = A \| imm | Z |
 | 05 | `XRI imm` | A = A ^ imm | Z |
 | 06 | `CPI imm` | flags of A − imm | Z, C |
-| 07 | `LDX imm` | X = imm | Z |
-| 08 | `CPX imm` | flags of X − imm | Z, C |
+| 07 | `LDX imm` | X = imm (high 4 bits = 0) | Z |
+| 08 | `CPX imm` | flags of X − imm, using all 12 bits of X | Z, C |
 | 09 | `ADC imm` | A = A + imm + C (add with carry) | Z, C = carry |
 | 0A | `SBC imm` | A = A − imm − C (subtract with borrow) | Z, C = borrow |
-| 0B–0F | reserved | does nothing | – |
+| 0B | `LDXH imm` | high 4 bits of X = low 4 bits of imm, low byte of X kept | – |
+| 0C–0F | reserved | does nothing | – |
 
 ### Misc group (op D, operand byte ignored)
 
@@ -61,18 +62,36 @@ Code, data and the stack share one 4 KB address space in the external SPI RAM. E
 | D3 | `SHR`  | 0 → A → C | Z, C |
 | D4 | `NOT`  | A = ~A | Z |
 | D5 | `HLT`  | stop (HALTED pin high) until reset | – |
-| D6 | `TAX`  | X = A | Z |
-| D7 | `TXA`  | A = X | Z |
-| D8 | `INX`  | X = X + 1 | Z |
-| D9 | `DEX`  | X = X − 1 | Z |
+| D6 | `TAX`  | X = A (high 4 bits = 0) | Z |
+| D7 | `TXA`  | A = low byte of X | Z (of A) |
+| D8 | `INX`  | X = X + 1 (12 bits) | Z (all of X) |
+| D9 | `DEX`  | X = X − 1 (12 bits) | Z (all of X) |
 | DA | `PUSH` | SP −= 1, M[SP] = A | – |
 | DB | `POP`  | A = M[SP], SP += 1 | Z |
 | DC | `RET`  | PC = {M[SP], M[SP+1]}, SP += 2 | – |
-| DD–DF | `NOP` | nothing | – |
+| DD | `TAXH` | high 4 bits of X = low 4 bits of A, low byte of X kept | – |
+| DE | `TXHA` | A = high 4 bits of X | Z |
+| DF | `NOP` | nothing | – |
 
 Flags that an instruction doesn't list are kept. In particular `LDA` and `ORI` keep `C`, which the shift-and-add examples rely on.
 
 `ADC` and `SBC` are for arithmetic wider than 8 bits. Because `LDA` keeps `C`, the high byte of a 16-bit add is `LDA a_hi` / `ADC 0` / `ADD b_hi`, with no branch (see `programs/add16.asm`). The carry out of that pair is only the carry of the last `ADD`, so a third byte would still need a branch.
+
+## X as a pointer
+
+X is 12 bits, so it can hold an address:
+
+```
+        LDX  <msg       ; low byte, clears the high bits
+        LDXH >msg       ; high 4 bits            X = msg
+loop:   LDA  0,X        ; the byte X points to
+        ...
+        INX
+```
+
+- A pointer kept in two memory bytes is loaded with `LDA lo` / `TAX` / `LDA hi` / `TAXH`, and saved with `TXA` / `STA lo` / `TXHA` / `STA hi`.
+- `INX` and `DEX` count through all 12 bits: `LDX 0` / `DEX` gives `0xFFF`, and a `DEX` / `JNZ` loop that starts at 0 runs 4096 times.
+- `CPX` compares the whole of X with an 8-bit value, so it can only be equal when X is below 256. To end a longer loop, count X down to 0 with `DEX` / `JNZ` (see `programs/pointer.asm`).
 
 AND, OR and XOR exist only as immediate forms. In version 1 they also had memory forms, which gave up their opcodes to the X and stack instructions.
 
