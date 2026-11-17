@@ -22,6 +22,8 @@ from cocotb.triggers import ClockCycles, Edge, FallingEdge, First, RisingEdge
 
 from cpu8tools import MEM_SIZE, assemble_file, tool
 
+CLK_NS = int(os.environ.get("CLK_NS", "100"))  # clock period, default 10 MHz
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROGRAMS = sorted(glob.glob(os.path.join(HERE, "..", "programs", "*.asm")))
 # PROGRAMS=hello,primes limits the run to those examples (handy on the
@@ -92,7 +94,7 @@ async def test_program(dut, program):
 
     for i, byte in enumerate(image):
         dut.ram.mem[i].value = byte
-    cocotb.start_soon(Clock(dut.clk, 100, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CLK_NS, unit="ns").start())
     dut.ena.value = 1
     dut.ui_in.value = ui
     dut.rst_n.value = 0

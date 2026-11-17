@@ -17,6 +17,11 @@ module tb ();
     #1;
   end
 
+`ifdef SDF_FILE
+  // Timing simulation: cell and wire delays from the layout (make SDF=...)
+  initial $sdf_annotate(`SDF_FILE, user_project);
+`endif
+
   // Wire up the inputs and outputs:
   reg clk;
   reg rst_n;

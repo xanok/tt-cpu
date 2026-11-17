@@ -12,6 +12,7 @@ from cpu8tools import assemble
 
 HALTED = 4  # uio_out bit
 GATES = os.environ.get("GATES") == "yes"  # running on the gate-level netlist
+CLK_NS = int(os.environ.get("CLK_NS", "100"))  # clock period, default 10 MHz
 
 
 def u(sig):
@@ -23,7 +24,7 @@ async def boot(dut, src, ui=0):
     image = assemble(src)
     for i, byte in enumerate(image):  # whole 4 KB: clears leftovers from earlier tests
         dut.ram.mem[i].value = byte
-    cocotb.start_soon(Clock(dut.clk, 100, unit="ns").start())  # 10 MHz
+    cocotb.start_soon(Clock(dut.clk, CLK_NS, unit="ns").start())  # 10 MHz
     dut.ena.value = 1
     dut.ui_in.value = ui
     dut.rst_n.value = 0

@@ -28,7 +28,17 @@ SIM_BUILD				= sim_build/gl_rise
 COMPILE_ARGS    += -DMISO_RISE
 endif
 COMPILE_ARGS    += -DGL_TEST
+ifeq ($(SDF),)
 COMPILE_ARGS    += -DFUNCTIONAL
+else
+# Timing simulation: make GATES=yes SDF=path/to/corner.sdf [CLK_NS=40]
+# The cells use their delay (specify) blocks, filled in from the SDF file
+# that hardening writes for each corner (runs/wokwi/final/sdf/<corner>/).
+# The SDF file must come from the same run as gate_level_netlist.v.
+SIM_BUILD       := $(SIM_BUILD)_sdf
+COMPILE_ARGS    += -gspecify -ginterconnect
+COMPILE_ARGS    += -DSDF_FILE=\"$(abspath $(SDF))\"
+endif
 COMPILE_ARGS    += -DUSE_POWER_PINS
 COMPILE_ARGS    += -DSIM
 COMPILE_ARGS    += -DUNIT_DELAY=\#1
