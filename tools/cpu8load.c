@@ -32,6 +32,9 @@ static int show_events;     /* -m: print EV UO lines */
 static int seen_halt;       /* got an EV HALT */
 static int out_mode;        /* -a: OUT bytes as text, -n: as numbers, 0: not shown */
 static FILE *info;          /* status messages: stdout, or stderr with -a / -n */
+static int keyboard;        /* -k: forward stdin to the program's input mailbox */
+static unsigned char kb_buf[64];
+static size_t kb_len;       /* bytes read from stdin, not yet accepted by the board */
 
 /* ---------------------------------------------------------------- utils */
 
@@ -313,6 +316,32 @@ static void dump_ram(unsigned addr, unsigned len)
     free(buf);
 }
 
+/* -k: pass what arrives on stdin to the firmware's input queue (PUT). */
+static void forward_keyboard(void)
+{
+    char hex[2 * sizeof kb_buf + 1], reply[100];
+    if (kb_len == 0 && keyboard == 1) {
+        struct pollfd p = { STDIN_FILENO, POLLIN, 0 };
+        if (poll(&p, 1, 0) > 0) {
+            ssize_t n = read(STDIN_FILENO, kb_buf, sizeof kb_buf);
+            if (n > 0)
+                kb_len = (size_t)n;
+            else if (n == 0 || (errno != EINTR && errno != EAGAIN))
+                keyboard = 2;  /* end of input: keep waiting for HLT */
+        }
+    }
+    if (kb_len == 0)
+        return;
+    for (size_t i = 0; i < kb_len; i++)
+        snprintf(hex + 2 * i, 3, "%02X", kb_buf[i]);
+    command(reply, sizeof reply, REPLY_MS, "PUT %s", hex);
+    size_t taken = (size_t)strtoul(reply, NULL, 10);
+    if (taken > kb_len)
+        taken = kb_len;
+    kb_len -= taken;  /* the rest did not fit in the queue: send it again later */
+    memmove(kb_buf, kb_buf + taken, kb_len);
+}
+
 /* ------------------------------------------------------------------ main */
 
 static void usage(FILE *f)
@@ -335,6 +364,8 @@ static void usage(FILE *f)
 "             (captured on the OUT_STROBE pin; like cpu8sim -a); implies -w\n"
 "  -n         print the OUT bytes as numbers, one per line; implies -w\n"
 "             (with -a / -n, status messages go to stderr)\n"
+"  -k         keyboard: like -a, and what you type goes to the program's\n"
+"             input mailbox (programs/lib/input.asm); no timeout unless -t\n"
 "  -m         monitor: print every uo_out change while running\n"
 "  -t SEC     timeout for -w, run time for -m alone (default 10)\n"
 "  -r A:L     after the run, dump L bytes of RAM from address A\n"
@@ -351,11 +382,12 @@ int main(int argc, char **argv)
     const char *dev = "/dev/ttyACM0";
     long project = -1;
     unsigned long clk = 10000000, ui = 0, sysclk = 0, timeout_s = 10, edge = 0;
+    int have_timeout = 0;
     int wait_halt = 0, monitor = 0, ndumps = 0;
     unsigned dump_addr[MAX_DUMPS], dump_len[MAX_DUMPS];
     int opt;
 
-    while ((opt = getopt(argc, argv, "d:p:f:i:s:e:wanmt:r:vh")) != -1) {
+    while ((opt = getopt(argc, argv, "d:p:f:i:s:e:wankmt:r:vh")) != -1) {
         switch (opt) {
         case 'd': dev = optarg; break;
         case 'p': project = (long)num_arg("-p", optarg, 1023); break;
@@ -365,8 +397,9 @@ int main(int argc, char **argv)
         case 'e': edge = num_arg("-e", optarg, 1); break;
         case 'w': wait_halt = 1; break;
         case 'a': case 'n': out_mode = opt; wait_halt = 1; break;
+        case 'k': keyboard = 1; wait_halt = 1; break;
         case 'm': monitor = 1; break;
-        case 't': timeout_s = num_arg("-t", optarg, 86400); break;
+        case 't': timeout_s = num_arg("-t", optarg, 86400); have_timeout = 1; break;
         case 'r': {
             char *colon = strchr(optarg, ':');
             unsigned long a, l;
@@ -394,6 +427,8 @@ int main(int argc, char **argv)
     }
     if (clk == 0)
         die("-f must be more than 0 Hz");
+    if (keyboard && !out_mode)
+        out_mode = 'a';
     info = out_mode ? stderr : stdout;
 
     /* Read the program. */
@@ -478,7 +513,9 @@ int main(int argc, char **argv)
             }
             if (seen_halt && wait_halt)
                 break;
-            if (now_ms() >= deadline) {
+            if (keyboard)
+                forward_keyboard();
+            if (now_ms() >= deadline && (have_timeout || !keyboard)) {
                 if (wait_halt) {
                     fprintf(stderr, "cpu8load: timeout: CPU did not halt within %lu s\n",
                             timeout_s);

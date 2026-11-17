@@ -19,6 +19,7 @@ Each program's header comments hold its expected output. `./run_tests.sh` assemb
 | `squares.asm` | decimal printing with `print_dec` from the library |
 | `print_demo.asm` | the print library: strings, decimal, hex, repeated characters |
 | `memcpy.asm` | block copy across a page boundary, verify, checksum |
+| `ask.asm` | keyboard input: asks your name and age, then prints both (`getline`) |
 | `bits.asm` | reads the input port: popcount, parity, bit reverse |
 | `maxmin.asm` | maximum and minimum, and their positions |
 | `hanoi.asm` | Towers of Hanoi, recursion with 4 saved arguments |
@@ -33,5 +34,13 @@ Each program's header comments hold its expected output. `./run_tests.sh` assemb
 ../tools/cpu8sim -s -t factorial.bin   # trace + register/clock summary
 ../tools/cpu8load -a hello.bin         # on the demo board
 ```
+
+```sh
+../tools/cpu8asm -o ask.bin ask.asm
+../tools/cpu8sim -a -k ask.bin         # interactive, in the simulator
+../tools/cpu8load -k ask.bin           # interactive, on the demo board
+```
+
+`lib/input.asm` is the text input library (`getchar`, `getline`). It reads from the input mailbox, two RAM bytes (flag 0xEFE, data 0xEFF) that the RP2040 or the simulator fills with what you type; the file's header explains the handshake. It doesn't work on the Tang Nano 20K build, which has no path from the PC into the RAM. A `; stdin: text` header line gives a program its input in the tests.
 
 `lib/print.asm` is the text output library (`print`, `print_dec`, `print_hex`, `newline`). Include it with `.include "lib/print.asm"` after your program's last instruction.

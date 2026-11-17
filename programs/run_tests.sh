@@ -4,6 +4,7 @@
 #   ; expect: 1 2 3          OUT values (decimal)
 #   ; expect-text: Hi\n      OUT values as text (\n, \t escapes)
 #   ; input: 0xB5            value on the input port
+#   ; stdin: Ana\n42\n        text for the input mailbox (lib/input.asm)
 #   ; limit: N               endless program: run N instructions, compare
 #                            the first outputs with "expect"
 # Usage: ./run_tests.sh [prog.asm ...]
@@ -24,6 +25,7 @@ for f in "${progs[@]}"; do
     name=$(basename "$f" .asm)
     input=$(hdr input "$f")
     limit=$(hdr limit "$f")
+    stdin=$(hdr stdin "$f")
     expect=$(hdr expect "$f")
     text=$(hdr expect-text "$f")
     result=FAIL
@@ -31,6 +33,7 @@ for f in "${progs[@]}"; do
     args=()
     [ -n "$input" ] && args+=(-i "$input")
     [ -n "$limit" ] && args+=(-n "$limit")
+    [ -n "$stdin" ] && args+=(-I "$stdin")
 
     if ! $ASM -l "build/$name.lst" -o "build/$name.bin" "$f"; then
         detail="assembler error"

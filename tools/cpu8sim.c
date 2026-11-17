@@ -9,6 +9,9 @@
  * the RTL (src/cpu.v) exactly: 88 clocks per instruction, plus 72 for a
  * 1-byte memory access, 88 for CALL/RET, and 73 + 17 per character for
  * STRLEN. Each SPI transaction is followed by 8 clocks with CS high.
+ *
+ * Input for programs that use the mailbox (programs/lib/input.asm) comes
+ * from -I TEXT or, with -k, from standard input.
  */
 #include <ctype.h>
 #include <stdio.h>
@@ -41,6 +44,69 @@ static void disasm(const struct cpu *s, unsigned addr, char *buf, size_t n)
     snprintf(buf, n, "NOP    (%02X %02X)", b0, lo);
 }
 
+/* Mailbox input: -I text (fed as soon as the flag is free, like the RP2040
+ * firmware does) or -k (read from stdin only when the program asks). */
+static unsigned char *in_text;
+static size_t in_len, in_pos;
+static int in_stdin;
+
+/* Copy s, replacing the escapes \n \r \t \0 \\ \xHH. */
+static void set_input(const char *s)
+{
+    in_text = malloc(strlen(s) + 1);
+    if (!in_text)
+        exit(1);
+    for (in_len = 0; *s; s++) {
+        int c = (unsigned char)*s;
+        if (c == '\\' && s[1]) {
+            switch (*++s) {
+            case 'n': c = '\n'; break;
+            case 'r': c = '\r'; break;
+            case 't': c = '\t'; break;
+            case '0': c = 0; break;
+            case 'x':
+                if (isxdigit((unsigned char)s[1]) && isxdigit((unsigned char)s[2])) {
+                    char h[3] = { s[1], s[2], 0 };
+                    c = (int)strtol(h, NULL, 16);
+                    s += 2;
+                    break;
+                }
+                /* fall through */
+            default: c = (unsigned char)*s; break;
+            }
+        }
+        in_text[in_len++] = (unsigned char)c;
+    }
+}
+
+/* Called before every instruction: put the next input byte in the mailbox. */
+static void feed_input(struct cpu *s)
+{
+    int c;
+    if (s->mem[CPU8_MBOX_FLAG] != 0)
+        return;
+    if (in_pos < in_len) {
+        c = in_text[in_pos++];
+    } else if (in_stdin) {
+        /* only when the next instruction reads the (empty) flag */
+        unsigned char b0 = s->mem[s->pc], lo = s->mem[(s->pc + 1) & 0xFFF];
+        unsigned op = b0 >> 4, ea = ((b0 & 0xFu) << 8) | lo;
+        if (op == 5)
+            ea = (ea + s->x) & 0xFFF;
+        if ((op != 1 && op != 5) || ea != CPU8_MBOX_FLAG)
+            return;
+        fflush(stdout);
+        if ((c = getchar()) == EOF) {
+            in_stdin = 0;
+            return;
+        }
+    } else {
+        return;
+    }
+    s->mem[CPU8_MBOX_DATA] = (unsigned char)c;
+    s->mem[CPU8_MBOX_FLAG] = 1;
+}
+
 static int parse_num(const char *s, long *v)
 {
     char *end;
@@ -53,6 +119,8 @@ static void usage(void)
     fprintf(stderr,
             "usage: cpu8sim [options] prog.bin\n"
             "  -i VALUE      input port value read by IN (default 0)\n"
+            "  -I TEXT       mailbox input (escapes \\n \\t \\r \\0 \\\\ \\xHH), see lib/input.asm\n"
+            "  -k            mailbox input from standard input (interactive)\n"
             "  -n COUNT      stop after COUNT instructions (default 10000000)\n"
             "  -t            trace every instruction\n"
             "  -a            print OUT values as text (characters)\n"
@@ -78,6 +146,8 @@ int main(int argc, char **argv)
         else if (!strcmp(o, "-a")) text = 1;
         else if (!strcmp(o, "-q")) quiet = 1;
         else if (!strcmp(o, "-s")) summary = 1;
+        else if (!strcmp(o, "-k")) in_stdin = 1;
+        else if (i + 1 < argc && !strcmp(o, "-I")) set_input(argv[++i]);
         else if (!strcmp(o, "-h") || !strcmp(o, "--help")) usage();
         else if (i + 1 < argc && !strcmp(o, "-i") && parse_num(argv[i + 1], &v) && v >= 0 && v < 256)
             s.in = (unsigned char)v, i++;
@@ -125,6 +195,7 @@ int main(int argc, char **argv)
         unsigned at = s.pc;
         if (trace)
             disasm(&s, at, dis, sizeof dis);
+        feed_input(&s);
         int out = step(&s);
         if (trace)
             fprintf(stderr, "%03X  %-17s  %02X %02X %02X %d %d\n", at, dis, s.a, s.x, s.sp, s.z, s.c);

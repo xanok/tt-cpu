@@ -11,6 +11,15 @@
 #define CPU8_MEM_SIZE   4096
 #define CPU8_STACK_PAGE 0xF00   /* stack lives in 0xF00-0xFFF */
 
+/*
+ * Input mailbox: a software convention, not part of the chip. Whoever owns
+ * the RAM (RP2040 firmware, simulator) waits until FLAG is 0, writes the
+ * next input byte to DATA and then sets FLAG to 1. The program waits for
+ * FLAG != 0, reads DATA and writes 0 to FLAG. See programs/lib/input.asm.
+ */
+#define CPU8_MBOX_FLAG  0xEFE
+#define CPU8_MBOX_DATA  0xEFF
+
 enum cpu8_kind {
     K_IMM,    /* byte0 = 0x0h (h = function), lo = 8-bit immediate */
     K_ADDR,   /* byte0 = op<<4 | ea[11:8], lo = ea[7:0]           */

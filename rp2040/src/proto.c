@@ -19,6 +19,17 @@
 #define SYSCLK_MIN_KHZ  50000
 #define SYSCLK_MAX_KHZ 250000
 
+// Input mailbox (a convention of the cpu8 programs, see
+// programs/lib/input.asm): when RAM[MBOX_FLAG] is 0, the next byte queued
+// with PUT is written to RAM[MBOX_DATA] and the flag is set to 1. The
+// program reads the byte and writes 0 to the flag.
+#define MBOX_FLAG   0x0EFEu
+#define MBOX_DATA   0x0EFFu
+#define INQ_SIZE    256u  // power of 2
+
+static uint8_t  inq[INQ_SIZE];
+static uint32_t inq_head, inq_tail;
+
 static char     line[LINE_LEN + 1];
 static unsigned line_len;
 static bool     line_too_long;
@@ -117,6 +128,7 @@ static void hold_reset(void)
 {
     hw_reset(true);
     st.in_reset = true;
+    inq_tail = inq_head;  // input not yet read by the program is dropped
 }
 
 static uint32_t max_clock(void)
@@ -140,6 +152,7 @@ static void cmd_help(void)
         "# W addr hexbytes      write up to 128 bytes to RAM",
         "# R addr len           read up to 128 bytes -> OK <hex>",
         "# FILL addr len val    fill RAM",
+        "# PUT hexbytes         queue input for the mailbox (0xEFE/0xEFF) -> OK <accepted> <free>",
         "# MON 0|1              stream EV UO <hex> <us> / EV HALT <us>",
         "# (always while running: EV OUT <hexbytes> = bytes written by OUT)",
         "# SYSCLK khz           RP2040 clock (holds reset) -> OK sys=.. clk=..",
@@ -153,11 +166,12 @@ static void cmd_help(void)
 
 static void cmd_status(void)
 {
-    reply("OK uo=%02X halted=%d rst=%d clk=%lu ui=%02X sel=%d sys=%lu mon=%d t=%lu lost=%lu edge=%d",
+    reply("OK uo=%02X halted=%d rst=%d clk=%lu ui=%02X sel=%d sys=%lu mon=%d t=%lu lost=%lu edge=%d inq=%u",
           hw_get_uo(), hw_get_halted() ? 1 : 0, st.in_reset ? 1 : 0,
           (unsigned long)st.clk_hz, st.ui, st.sel, (unsigned long)hw_sys_hz(),
           st.monitor ? 1 : 0, st.in_reset ? 0ul : since_go_us(),
-          (unsigned long)hw_out_lost(), st.miso_rise ? 1 : 0);
+          (unsigned long)hw_out_lost(), st.miso_rise ? 1 : 0,
+          (unsigned)(inq_head - inq_tail));
 }
 
 static void cmd_clock(uint32_t hz)
@@ -217,6 +231,44 @@ static void cmd_write(uint32_t addr, const char *hex)
         return;
     memcpy(hw_ram + addr, buf, n / 2);
     reply("OK %u", (unsigned)(n / 2));
+}
+
+// Queue input bytes; takes as many as fit, the host resends the rest.
+static void cmd_put(const char *hex)
+{
+    size_t n = strlen(hex);
+    if (st.in_reset) {
+        reply("ERR not running (send GO first)");
+        return;
+    }
+    if (n % 2 != 0) {
+        reply("ERR need an even number of hex digits");
+        return;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (hex_digit(hex[i]) < 0) {
+            reply("ERR bad hex data");
+            return;
+        }
+    unsigned done = 0;
+    while (done < n / 2 && inq_head - inq_tail < INQ_SIZE) {
+        inq[inq_head++ & (INQ_SIZE - 1)] =
+            (uint8_t)(hex_digit(hex[2 * done]) << 4 | hex_digit(hex[2 * done + 1]));
+        done++;
+    }
+    reply("OK %u %u", done, (unsigned)(INQ_SIZE - (inq_head - inq_tail)));
+}
+
+// Move one queued input byte to the mailbox when the program has taken the
+// previous one. Data first, then the flag: the program only looks at the
+// data after it has seen the flag.
+static void feed_mailbox(void)
+{
+    volatile uint8_t *ram = hw_ram;
+    if (st.in_reset || inq_tail == inq_head || ram[MBOX_FLAG] != 0)
+        return;
+    ram[MBOX_DATA] = inq[inq_tail++ & (INQ_SIZE - 1)];
+    ram[MBOX_FLAG] = 1;
 }
 
 static void cmd_read(uint32_t addr, uint32_t len)
@@ -285,7 +337,8 @@ static void execute(char *cmdline)
     static const struct { const char *name; int nargs; } cmds[] = {
         {"PING", 0}, {"HELP", 0}, {"ST", 0}, {"SEL", 1}, {"ATTACH", 0},
         {"DETACH", 0}, {"RST", 0}, {"GO", 0}, {"CLK", 1}, {"UI", 1}, {"EDGE", 1},
-        {"W", 2}, {"R", 2}, {"FILL", 3}, {"MON", 1}, {"SYSCLK", 1}, {"BOOT", 0},
+        {"W", 2}, {"R", 2}, {"FILL", 3}, {"PUT", 1}, {"MON", 1}, {"SYSCLK", 1},
+        {"BOOT", 0},
     };
     const char *name = argv[0];
     int nargs = -1;
@@ -356,6 +409,8 @@ static void execute(char *cmdline)
             return;
         memset(hw_ram + a, (int)c, b);
         reply("OK");
+    } else if (!strcmp(name, "PUT")) {
+        cmd_put(argv[1]);
     } else if (!strcmp(name, "MON")) {
         if (!arg_num(argv, 1, 1, &a))
             return;
@@ -399,6 +454,7 @@ void proto_input(int c)
 void proto_poll(void)
 {
     send_out_bytes();  // always, and before EV HALT so the output is complete
+    feed_mailbox();
     if (!st.monitor || st.in_reset)
         return;
     uint8_t uo = hw_get_uo();

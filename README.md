@@ -21,9 +21,9 @@ Toolchain: `source ~/tools/oss-cad-suite/environment`
 |---|---|
 | Build the C tools | `make -C tools` |
 | Assemble | `tools/cpu8asm -o prog.bin -l prog.lst prog.asm` |
-| Simulate | `tools/cpu8sim -s prog.bin` (`-a` text output, `-t` trace, `-i` input, `-d addr:len` dump) |
+| Simulate | `tools/cpu8sim -s prog.bin` (`-a` text output, `-t` trace, `-i` input port, `-k` keyboard input, `-d addr:len` dump) |
 | Test the examples in the simulator | `programs/run_tests.sh` |
-| Run on the demo board (RP2040 firmware in `rp2040/`) | `tools/cpu8load -a prog.bin` (text output), `-n` (numbers), `-r addr:len` (dump RAM) |
+| Run on the demo board (RP2040 firmware in `rp2040/`) | `tools/cpu8load -a prog.bin` (text output), `-k` (text output and keyboard input), `-n` (numbers), `-r addr:len` (dump RAM) |
 | Run tests (RTL, incl. every example vs the simulator) | `cd test && make` (waveform in `test/tb.fst`: `gtkwave tb.fst`) |
 | Same, with the MISO_RISE strap high and stock spi-ram-emu RAM timing | `cd test && make MISO_RISE=yes` |
 | Build FPGA bitstream | `cd fpga && make` (or `make PROG=../programs/other.asm`) |

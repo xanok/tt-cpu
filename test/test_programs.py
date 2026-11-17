@@ -7,6 +7,8 @@ does it: on every edge of the OUT_STROBE pin (uio[5]), read uo_out.
 Program header comments used here:
     ; input: N     value on ui_in (IN instruction)
     ; limit: N     endless program: skipped here (tested in the simulator only)
+    ; stdin: TEXT  input for the mailbox (programs/lib/input.asm): fed into
+                   the RAM model the way the RP2040 firmware does it
 """
 import glob
 import os
@@ -31,16 +33,34 @@ def header(path):
             m = re.match(r"\s*;\s*(input|limit)\s*:\s*(\S+)", line)
             if m:
                 meta[m.group(1)] = int(m.group(2), 0)
+            m = re.match(r"\s*;\s*stdin\s*:\s*(.*)", line)
+            if m:
+                meta["stdin"] = m.group(1).rstrip("\n")
     return meta
 
 
-def reference(image, ui):
+MBOX_FLAG, MBOX_DATA = 0xEFE, 0xEFF
+
+
+async def feed_mailbox(dut, data):
+    """Like the firmware: when the flag is 0, write the next byte, set the flag."""
+    for byte in data:
+        while True:
+            await RisingEdge(dut.clk)
+            if int(dut.ram.mem[MBOX_FLAG].value) == 0:
+                break
+        dut.ram.mem[MBOX_DATA].value = byte
+        dut.ram.mem[MBOX_FLAG].value = 1
+        await RisingEdge(dut.clk)
+
+
+def reference(image, ui, stdin=""):
     """Run the C simulator: returns (outs, memory, clocks)."""
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "prog.bin")
         with open(path, "wb") as f:
             f.write(image)
-        r = subprocess.run([tool("cpu8sim"), "-s", "-i", str(ui), "-d", f"0:{MEM_SIZE}", path],
+        r = subprocess.run([tool("cpu8sim"), "-s", "-i", str(ui), "-I", stdin, "-d", f"0:{MEM_SIZE}", path],
                            capture_output=True, text=True, check=True)
     outs, memory = [], []
     for line in r.stdout.splitlines():
@@ -62,7 +82,8 @@ async def test_program(dut, program):
         return
     ui = meta.get("input", 0)
     image = assemble_file(path)
-    ref_outs, ref_mem, ref_clocks = reference(image, ui)
+    stdin = meta.get("stdin", "")
+    ref_outs, ref_mem, ref_clocks = reference(image, ui, stdin)
 
     for i, byte in enumerate(image):
         dut.ram.mem[i].value = byte
@@ -72,6 +93,8 @@ async def test_program(dut, program):
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 5)
     dut.rst_n.value = 1
+    if stdin:
+        cocotb.start_soon(feed_mailbox(dut, stdin.encode().decode("unicode_escape").encode("latin-1")))
 
     outs = []
     timeout = ref_clocks + 1000

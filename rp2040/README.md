@@ -110,7 +110,7 @@ cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visib
 | Command | Reply | Notes |
 |---------|-------|-------|
 | `PING` | `OK cpu8-loader 1` | the last number is the protocol version |
-| `ST` | `OK uo=XX halted=0/1 rst=0/1 clk=<Hz> ui=XX sel=<addr or -1> sys=<Hz> mon=0/1 t=<us>` | t = µs since GO (0 in reset; wraps after 71 min) |
+| `ST` | `OK uo=XX halted=0/1 rst=0/1 clk=<Hz> ui=XX sel=<addr or -1> sys=<Hz> mon=0/1 t=<us> lost=<n> edge=0/1 inq=<n>` | t = µs since GO (0 in reset; wraps after 71 min); inq = input bytes still queued |
 | `SEL addr` | `OK` | 0..1023. Holds reset, floats ui_in/MISO, runs the mux sequence, then drives ui_in and MISO |
 | `ATTACH` / `DETACH` | `OK` | drive or float ui_in and MISO without selecting a project (for example when it is already selected) |
 | `RST` | `OK` | hold rst_n low |
@@ -121,12 +121,19 @@ cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visib
 | `W addr hex` | `OK <n>` | write up to 128 bytes |
 | `R addr len` | `OK <hex>` | read 1..128 bytes |
 | `FILL addr len val` | `OK` | for example `FILL 0 4096 0` |
+| `PUT hex` | `OK <accepted> <free>` | queue input bytes for the program (see "Input mailbox"). Takes as many as fit in the 256-byte queue; send the rest again later. `ERR` in reset |
 | `MON 0/1` | `OK` | uo_out/HALT event streaming |
 | `SYSCLK khz` | `OK sys=<Hz> clk=<Hz>` | 50000..250000. Holds reset, then sets the clock up again if it still fits. Uses 1.20 V above 200 MHz |
 | `HELP` | `# ...` lines, then `OK` | |
 | `BOOT` | `OK` | then reboots into the UF2 bootloader |
 
 Addresses cover the whole 64 KB emulated RAM. cpu8 only sees 0x0000-0x0FFF and keeps its stack at 0xF00-0xFFF. RAM can be written and read while the CPU runs. That is useful for peeking at results, but it is not synchronised with the CPU.
+
+### Input mailbox (`PUT`, `cpu8load -k`)
+
+cpu8 has no text input, but the RP2040 is its RAM. Programs that use `programs/lib/input.asm` treat two RAM bytes as a mailbox: a flag at 0xEFE and a data byte at 0xEFF. In its main loop the firmware checks the flag; when it is 0 and the `PUT` queue is not empty, it writes the next byte to 0xEFF and then sets the flag to 1. The program waits for the flag, reads the byte and writes 0 to the flag. The data byte is always written before the flag, and each side only writes single bytes, so no locking is needed. Reset (`RST`, `GO`, `SEL`, `EDGE`, `SYSCLK`) empties the queue, so input is sent after `GO`.
+
+`cpu8load -k` prints the program's output as text and sends everything that arrives on its standard input with `PUT`. On a terminal you type a line and press Enter; the terminal echoes it. Input can also be piped: `printf 'Ana\n42\n' | cpu8load -k ask.bin`. This is tested on the mock board, not yet on hardware.
 
 The `cpu8load` sequence is: `PING`, [`SYSCLK`], `RST`, `SEL p` or `ATTACH`, `FILL 0 4096 0`, then `W` in 128-byte chunks, then `R` to read everything back and verify, `CLK f`, `UI v`, `EDGE e`, [`MON 1`], `GO`. Then it polls `ST` and/or follows `EV` lines until HALTED or the timeout, then `ST`, [`MON 0`], and `R` for each `-r` dump.
 

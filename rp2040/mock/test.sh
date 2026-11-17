@@ -64,6 +64,16 @@ check "uneven clock"    0 "running at 9523809 Hz"    -- $L -f 9500000 "$TMP/prog
 check "sysclk"          0 "sys=125000000"            -- $L -s 125000 -w "$TMP/count.bin"
 check "edge strap"      0 "halted = yes"             -- $L -e 1 -w "$TMP/count.bin"
 check "sysclk back"     0 "sys=200000000"            -- $L -s 200000 "$TMP/prog.bin"
+$ASM -o "$TMP/ask.bin" ../../programs/ask.asm || exit 1
+# keyboard input arriving slowly, and a line longer than the firmware queue
+check "keyboard"        0 "^What is your name? What is your age? Hello, Zoe! You are 9 years old.$" \
+                                                     -- sh -c "printf 'Zoe\n9\n' | $L -k -t 10 $TMP/ask.bin"
+check "keyboard slow"   0 "Hello, Grace! You are 36 years old.$" \
+                                                     -- sh -c "(sleep 0.3; printf 'Grace\n'; sleep 0.3; printf '36\n') | $L -k -t 10 $TMP/ask.bin"
+LONG=$(python3 -c 'print("x" * 700)')
+check "keyboard long"   0 "Hello, xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx! You are 5 years old.$" \
+                                                     -- sh -c "printf '$LONG\n5\n' | $L -k -t 20 $TMP/ask.bin"
+check "keyboard eof"    2 "did not halt within 1 s"  -- sh -c "printf 'Zoe\n' | $L -k -t 1 $TMP/ask.bin"
 check "bad -r"          1 "outside the 64 KB RAM"    -- $L -r 0xFFF0:32 "$TMP/prog.bin"
 
 # Every halting example: the board's OUT output (-n) must equal cpu8sim's.
@@ -72,8 +82,13 @@ for f in ../../programs/*.asm; do
     grep -q '^; *limit:' "$f" && continue
     input=$(sed -n 's/^; *input: *//p' "$f" | head -1)
     $ASM -o "$TMP/$name.bin" "$f" || { fails=$((fails + 1)); continue; }
-    $SIM -i "${input:-0}" "$TMP/$name.bin" > "$TMP/$name.sim"
-    $L -n -i "${input:-0}" "$TMP/$name.bin" > "$TMP/$name.board" 2> "$TMP/$name.err"
+    stdin=$(sed -n 's/^; *stdin: *//p' "$f" | head -1)
+    $SIM -i "${input:-0}" -I "$stdin" "$TMP/$name.bin" > "$TMP/$name.sim"
+    if [ -n "$stdin" ]; then  # mailbox input, typed on the "keyboard"
+        printf '%b' "$stdin" | $L -n -k -t 10 "$TMP/$name.bin" > "$TMP/$name.board" 2> "$TMP/$name.err"
+    else
+        $L -n -i "${input:-0}" "$TMP/$name.bin" > "$TMP/$name.board" 2> "$TMP/$name.err"
+    fi
     if cmp -s "$TMP/$name.sim" "$TMP/$name.board"; then
         echo "ok   example $name ($(wc -l < "$TMP/$name.sim") OUT bytes)"
     else
@@ -121,6 +136,19 @@ tests = [
     ("EDGE 2", "ERR 2 out of range (max 1)"),
     ("EDGE 1", "OK"),
     ("EDGE 0", "OK"),
+    ("PUT 41", "ERR not running (send GO first)"),
+    ("CLK 1000000", "OK 1000000"),
+    ("FILL 0 4096 0", "OK"),
+    ("W 0 9000", "OK 2"),            # JMP 0
+    ("GO", "OK"),
+    ("PUT 4", "ERR need an even number of hex digits"),
+    ("PUT 4x", "ERR bad hex data"),
+    ("PUT 414243", "OK 3 25"),       # one byte may already be in the mailbox
+    ("R 0xEFE 2", "OK 0141"),
+    ("W 0xEFE 00", "OK 1"),          # the "program" takes the byte
+    ("R 0xEFE 2", "OK 0142"),
+    ("ST", "~ inq=1"),               # "~": anywhere in the reply
+    ("RST", "OK"),
     ("CLK 0", "OK 0"),
     ("GO", "ERR clock is stopped (send CLK first)"),
     ("CLK 1", "ERR 1 Hz too slow: min 12 Hz"),
@@ -134,6 +162,8 @@ tests = [
 bad = 0
 for c, want in tests:
     got = cmd(c)
+    if want[0] == "~" and want[1:] in got:
+        continue
     if not got.startswith(want):
         print("FAIL raw %r: got %r want %r" % (c[:20], got, want)); bad += 1
 print("raw protocol: %d/%d ok" % (len(tests) - bad, len(tests)))
