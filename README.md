@@ -28,8 +28,25 @@ Toolchain: `source ~/tools/oss-cad-suite/environment`
 | Build FPGA bitstream | `cd fpga && make` (or `make PROG=../programs/other.asm`) |
 | Flash to SRAM (temporary) | `cd fpga && make flash` |
 | Flash permanently | `cd fpga && make flash-persist` |
+| Simulate the FPGA top (UART output vs cpu8sim) | `cd fpga && make sim PROG=../programs/hello.asm` |
 
-On the Tang Nano 20K the 6 LEDs show `uo_out[5:0]`, and buttons S1/S2 feed `ui_in[1:0]`.
+## Running an example on the Tang Nano 20K
+
+The FPGA holds the whole system: the CPU, plus the SPI RAM as block RAM preloaded with the program. The program is chosen when you build the bitstream.
+
+```sh
+source ~/tools/oss-cad-suite/environment
+openFPGALoader --detect                          # once: board found? (GW2AR-18)
+cd fpga
+make flash PROG=../programs/hello.asm            # build + load (lost on power-off)
+picocom -b 115200 /dev/ttyUSB1                   # text output (2nd port of the board)
+```
+
+- **LEDs:** show `uo_out[5:0]`, the last `OUT` value. `knight_rider.asm` and `blink.asm` are made for them.
+- **S1:** reset. Press it to run the program again, for example after opening the terminal.
+- **S2:** `ui_in[1]`. `ui_in[0]` reads 0.
+- **UART:** every byte written with `OUT` goes over the board's USB-C cable at 115200 8N1 (FPGA pin 69), so `hello`, `print_demo`, `squares` and `hanoi` print text. A 1 KB FIFO absorbs bursts; when it is full, bytes are dropped.
+- The board shows up as two serial ports. Use the second one, usually `/dev/ttyUSB1`. If `openFPGALoader` reports "permission denied", the USB device needs a udev rule, which needs root.
 
 ## Before submitting to Tiny Tapeout
 

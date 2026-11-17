@@ -8,3 +8,5 @@ IO_LOC "led[2]" 17;
 IO_LOC "led[3]" 18;
 IO_LOC "led[4]" 19;
 IO_LOC "led[5]" 20;
+IO_LOC "uart_tx" 69;
+IO_PORT "uart_tx" IO_TYPE=LVCMOS33;
