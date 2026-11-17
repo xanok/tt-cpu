@@ -3,6 +3,7 @@
 #                       make sim PROG=../programs/hello.asm  (UART output vs cpu8sim)
 #                       make flash      (SRAM, lost on power-off)
 #                       make flash-persist (SPI flash)
+#                       make chip / flash-chip: chip only, for the bench test (docs/bench.md)
 OSS    ?= $(HOME)/tools/oss-cad-suite
 export PATH := $(OSS)/bin:$(PATH)
 
@@ -34,6 +35,30 @@ build/pnr.json: build/synth.json tangnano20k.cst
 build/tt_cpu.fs: build/pnr.json
 	gowin_pack -d $(FAMILY) -o $@ $< 2>/dev/null
 
+# ---- chip-only build for the bench test with a Pico 2 (docs/bench.md):
+# no RAM and no program in the FPGA, the chip's pins are on the headers.
+CHIP_SRCS = tangnano20k_chip.v ../src/project.v ../src/cpu.v
+
+build/chip_synth.json: $(CHIP_SRCS) | build
+	yosys -q -l build/chip_yosys.log -p "read_verilog -DSYNTH_FPGA $(CHIP_SRCS); synth_gowin -top tangnano20k_chip -json $@"
+
+build/chip_pnr.json: build/chip_synth.json tangnano20k_chip.cst
+	nextpnr-himbaechel -q -l build/chip_nextpnr.log --json $< --write $@ \
+	  --device $(DEVICE) --vopt family=$(FAMILY) --vopt cst=tangnano20k_chip.cst
+
+# Some header pins double as configuration pins (SSPI, READY, DONE); the
+# flags release them as ordinary I/O, as the LiteX board file for this board does.
+build/tt_cpu_chip.fs: build/chip_pnr.json
+	gowin_pack -d $(FAMILY) --sspi_as_gpio --mspi_as_gpio --ready_as_gpio --done_as_gpio -o $@ $< 2>/dev/null
+
+chip: build/tt_cpu_chip.fs
+
+flash-chip: build/tt_cpu_chip.fs
+	openFPGALoader -b tangnano20k $<
+
+flash-chip-persist: build/tt_cpu_chip.fs
+	openFPGALoader -b tangnano20k -f $<
+
 build:
 	mkdir -p build
 
@@ -62,4 +87,4 @@ flash-persist: build/tt_cpu.fs
 clean:
 	rm -rf build
 
-.PHONY: all sim flash flash-persist clean FORCE
+.PHONY: all sim flash flash-persist chip flash-chip flash-chip-persist clean FORCE

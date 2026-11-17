@@ -10,6 +10,7 @@ An 8-bit CPU (accumulator, index register X, stack with CALL/RET) that runs from
 | [docs/io.md](docs/io.md) | input and output: `OUT`, `IN`, text output, keyboard input, on every platform |
 | [programs/README.md](programs/README.md) | the 23 example programs and the two libraries |
 | [rp2040/README.md](rp2040/README.md) | demo board firmware for the RP2350B and RP2040 boards: build, pin maps, serial protocol, timing limits |
+| [docs/bench.md](docs/bench.md) | hardware test before tapeout: Tang Nano 20K as the chip, Pico 2 as the demo board, wiring table |
 | [docs/info.md](docs/info.md) | the Tiny Tapeout datasheet page: pins, strap, reset |
 
 ## Quick start

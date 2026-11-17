@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 3.13)
 #   cmake -B build -DPICO_SDK_PATH=~/tools/pico-sdk && cmake --build build
 # Build for the older RP2040 demo board (also used by emutest/):
 #   cmake -B build_rp2040 -DTT_BOARD=rp2040 -DPICO_SDK_PATH=~/tools/pico-sdk
-set(TT_BOARD rp2350 CACHE STRING "Demo board: rp2350 (TT DB v3 / ETR) or rp2040 (TT06+)")
+# Build for a Raspberry Pi Pico 2 on the bench (docs/bench.md):
+#   cmake -B build_pico2 -DTT_BOARD=pico2 -DPICO_SDK_PATH=~/tools/pico-sdk
+set(TT_BOARD rp2350 CACHE STRING "Board: rp2350 (TT DB v3 / ETR), rp2040 (TT06+) or pico2 (bench test)")
 if (TT_BOARD STREQUAL "rp2350")
     set(PICO_BOARD tt_demo_rp2350 CACHE STRING "Board type")
     set(TT_BOARD_DEF TT_BOARD_RP2350)
@@ -13,8 +15,12 @@ elseif (TT_BOARD STREQUAL "rp2040")
     # 200 MHz system clock (officially supported by RP2040; the SDK raises the
     # core voltage to 1.15 V for it). Gives the spi-ram-emu timing more margin.
     set(TT_BOARD_DEF TT_BOARD_RP2040 SYS_CLK_MHZ=200)
+elseif (TT_BOARD STREQUAL "pico2")
+    # bench test: Raspberry Pi Pico 2 wired to a Tang Nano 20K (docs/bench.md)
+    set(PICO_BOARD pico2 CACHE STRING "Board type")
+    set(TT_BOARD_DEF TT_BOARD_PICO2)
 else()
-    message(FATAL_ERROR "TT_BOARD must be rp2350 or rp2040")
+    message(FATAL_ERROR "TT_BOARD must be rp2350, rp2040 or pico2")
 endif()
 set(PICO_BOARD_HEADER_DIRS ${CMAKE_CURRENT_LIST_DIR}/boards)
 if (NOT CMAKE_BUILD_TYPE)

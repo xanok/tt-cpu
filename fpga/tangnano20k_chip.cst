@@ -1,0 +1,36 @@
+// Tang Nano 20K, chip-only build (bench test with a Pico 2). FPGA pin
+// numbers; header positions are in docs/bench.md. All 3.3 V.
+// Left out on purpose: 15-20 (LEDs), 79 (RGB LED), 25-31.
+IO_LOC "clk" 73;
+IO_PORT "clk" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+IO_LOC "rst_n" 74;
+IO_PORT "rst_n" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+IO_LOC "ui_in[0]" 76;
+IO_LOC "ui_in[1]" 85;
+IO_LOC "ui_in[2]" 77;
+IO_PORT "ui_in[0]" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+IO_PORT "ui_in[1]" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+IO_PORT "ui_in[2]" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+IO_LOC "uo_out[0]" 75;
+IO_LOC "uo_out[1]" 80;
+IO_LOC "uo_out[2]" 42;
+IO_LOC "uo_out[3]" 41;
+IO_LOC "uo_out[4]" 56;
+IO_LOC "uo_out[5]" 54;
+IO_LOC "uo_out[6]" 51;
+IO_LOC "uo_out[7]" 48;
+IO_LOC "spi_cs_n" 55;
+IO_LOC "spi_mosi" 49;
+IO_LOC "spi_miso" 86;
+IO_PORT "spi_miso" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+IO_LOC "spi_sck" 72;
+IO_LOC "halted" 71;
+IO_LOC "out_strobe" 53;
+IO_LOC "miso_rise" 52;
+IO_PORT "miso_rise" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+IO_LOC "led[0]" 15;
+IO_LOC "led[1]" 16;
+IO_LOC "led[2]" 17;
+IO_LOC "led[3]" 18;
+IO_LOC "led[4]" 19;
+IO_LOC "led[5]" 20;

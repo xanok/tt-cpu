@@ -24,7 +24,12 @@ static const uint8_t pins_ui[8] = PINS_UI;
 static const uint8_t pins_uo[8] = PINS_UO;
 static uint32_t ui_mask;
 
-#if TT07_CB_FIX
+#ifndef TT_NO_MUX
+#define TT_NO_MUX 0
+#endif
+#if TT_NO_MUX
+// no project mux on this board
+#elif TT07_CB_FIX
 #define PIN_INC  PIN_CTRL_SEL_RST_N
 #define PIN_NCRST PIN_CTRL_SEL_INC
 #else
@@ -92,10 +97,12 @@ uint32_t hw_out_lost(void) { return out_lost; }
 
 void hw_init(void)
 {
+#if !TT_NO_MUX
     // Mux control: nothing selected until SEL.
     out_pin(PIN_CTRL_ENA, 0);
     out_pin(PIN_INC, 0);
     out_pin(PIN_NCRST, 1);
+#endif
 
     out_pin(PIN_PROJ_RST_N, 0);  // project held in reset
     gpio_pull_up(PIN_PROJ_RST_N);  // helps the board pull-up once released
@@ -132,6 +139,9 @@ void hw_sleep_us(uint32_t us) { sleep_us(us); }
 // Same sequence as ProjectMux.reset_and_clock_mux() in tt-micropython-firmware.
 void hw_select_project(unsigned addr)
 {
+#if TT_NO_MUX
+    (void)addr;
+#else
     gpio_put(PIN_INC, 0);
     gpio_put(PIN_NCRST, 0);
     gpio_put(PIN_CTRL_ENA, 0);
@@ -145,6 +155,7 @@ void hw_select_project(unsigned addr)
         sleep_ms(1);
     }
     gpio_put(PIN_CTRL_ENA, 1);
+#endif
 }
 
 void hw_attach(bool on)

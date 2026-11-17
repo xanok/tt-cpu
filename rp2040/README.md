@@ -70,7 +70,7 @@ Both maps come from [tt-micropython-firmware](https://github.com/TinyTapeout/tt-
 - **RP2350 clock:** the firmware runs the RP2350 at its rated 150 MHz, so the chip clock limit (sys/10) is 15 MHz and the 10 MHz default leaves 120 system clocks for the re-arm described below, against 160 on the RP2040 at 200 MHz. `SYSCLK 200000` (`cpu8load -s 200000`) raises it; that is overclocking, at 1.15 V.
 - **TT04/TT05 boards are not supported.** They route rst_n and the mux control lines through an on-board analog mux that is shared with uo_out[0..3].
 - **TT07 chips:** the TT07 carrier board swaps ctrl_sel_inc and ctrl_sel_rst_n. Set `TT07_CB_FIX 1` in `pinmap.h`.
-- **A Pico 2 is not the demo board.** It has the smaller RP2350A without GPIO 30-47, so a bench test with one needs a third pin map, which is not written yet.
+- **Pico 2 on the bench:** `-DTT_BOARD=pico2` builds for a Raspberry Pi Pico 2 (RP2350A) wired to a Tang Nano 20K, with its own pin map and no project mux. See [docs/bench.md](../docs/bench.md).
 
 **Project selection** copies `ProjectMux.reset_and_clock_mux()` from the TT firmware:
 1. Set ctrl_ena=0 and ctrl_sel_rst_n=0, wait 10 ms.
