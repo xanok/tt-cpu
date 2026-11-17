@@ -72,22 +72,14 @@ Flags that an instruction doesn't list are kept. In particular `LDA` and `ORI` k
 
 AND, OR and XOR exist only as immediate forms. In version 1 they also had memory forms, which gave up their opcodes to the X and stack instructions.
 
-## Text output
+## Input and output
 
-Every `OUT` toggles the OUT_STROBE pin (`uio[5]`), even when the value doesn't change. The RP2040 firmware captures each byte on the strobe edges, and `tools/cpu8load -a prog.bin` prints them as text, the same way `tools/cpu8sim -a prog.bin` does. `programs/lib/print.asm` provides `print` (a string), `print_dec`, `print_hex` and `newline`:
+- `OUT` writes A to the output pins and toggles OUT_STROBE (`uio[5]`), so a listener can capture every byte, repeated values included.
+- `IN` reads the 8 input pins.
+- Text output (`lib/print.asm`) is built on `OUT`.
+- Keyboard input (`lib/input.asm`) uses a mailbox of two RAM bytes, `0xEFE` and `0xEFF`, which the owner of the RAM fills in. It is a software convention, not part of the chip.
 
-```
-        LDI >msg        ; A = high byte of the address
-        LDX <msg        ; X = low byte
-        CALL print
-        HLT
-        .include "lib/print.asm"
-msg:    .asciz "hello\n"
-```
-
-## Text input
-
-The chip has no text input instruction; `IN` only reads the 8 input pins. On the demo board the RP2040 is the CPU's RAM, so input is a software convention: a mailbox of two RAM bytes, flag at 0xEFE and data at 0xEFF. The RP2040 writes a byte to 0xEFF and sets the flag when the flag is 0; the program reads the byte and clears the flag. `programs/lib/input.asm` provides `getchar` and `getline`, `tools/cpu8load -k prog.bin` forwards the keyboard, and `tools/cpu8sim -k` (or `-I "text"`) does the same in the simulator. On the Tang Nano 20K the FPGA top fills the mailbox from its UART. See `programs/ask.asm`.
+[io.md](io.md) describes all of it: the handshake, the libraries, and how to run a program with input and output on each platform.
 
 ## Stack
 
