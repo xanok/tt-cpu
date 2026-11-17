@@ -99,8 +99,22 @@ picocom -b 115200 /dev/ttyUSB1                   # text output (2nd port of the 
 - **Keyboard input:** what you type in the terminal goes to the FPGA (pin 70) and on to the program, so `ask.asm` works. Start picocom with `--echo --omap crlf` and press S1 to see the first prompt. Details are in [docs/io.md](docs/io.md).
 - The board shows up as two serial ports. Use the second one, usually `/dev/ttyUSB1`. If `openFPGALoader` reports "permission denied", the USB device needs a udev rule, which needs root.
 
+## Target process and shuttle
+
+The chip targets **GlobalFoundries GF180MCU** on the Tiny Tapeout shuttle **ttgf26c**, in a 1x1 tile (about 340 × 160 µm).
+
+| | GF180 (this branch) |
+|---|---|
+| Utilization | 68% |
+| Clock target | 25 MHz (`CLOCK_PERIOD` 40 ns); the chip is meant to run at 10 MHz |
+| Worst setup / hold slack | +3.6 ns / +0.20 ns over all corners (local run, LibreLane 3.0.14) |
+| Special setting | delay cells excluded (`EXTRA_EXCLUDED_CELLS`), see `src/config.json` |
+
+The design was first hardened for SkyWater sky130 (1x1 tile, 82% utilization, shuttle tag `ttsky26d`). That state, with its config and its metal-4 logo macro, is kept as the git tag **`sky130-verified`**. `macros/`, `art/` and `tools/make_logo.py` belong to that sky130 logo and are not used by the GF180 build.
+
 ## Before submitting to Tiny Tapeout
 
-- Make the repo public (TT needs public GitHub Actions).
+- Make the repo public (TT needs public GitHub Actions) and turn on GitHub Pages.
 - Fill in `author` / `discord` in `info.yaml`.
 - Push to GitHub. The `gds` action hardens the design and shows whether it fits the tile count.
+- Submit the commit whose `gds` run passed.
