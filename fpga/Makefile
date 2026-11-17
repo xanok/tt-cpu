@@ -12,8 +12,11 @@ SRCS    = tangnano20k.v ../src/project.v ../src/cpu.v ../model/spi_ram_model.v
 
 all: build/tt_cpu.fs
 
-build/prog.hex: $(PROG) ../tools/asm.py | build
-	python3 ../tools/asm.py $(PROG) -o $@
+../tools/cpu8asm: ../tools/cpu8asm.c ../tools/cpu8isa.h
+	$(MAKE) -C ../tools cpu8asm
+
+build/prog.hex: $(PROG) ../tools/cpu8asm | build
+	../tools/cpu8asm -f hex -o $@ $(PROG)
 
 build/synth.json: $(SRCS) build/prog.hex
 	yosys -q -l build/yosys.log -p "read_verilog -DSYNTH_FPGA $(SRCS); synth_gowin -top tangnano20k_top -json $@"

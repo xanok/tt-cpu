@@ -42,8 +42,17 @@ VERILOG_SOURCES += $(PWD)/../model/spi_ram_model.v
 VERILOG_SOURCES += $(PWD)/tb.v
 TOPLEVEL = tb
 
-# List test modules to run, separated by commas and without the .py suffix:
+# List test modules to run, separated by commas and without the .py suffix.
+# test_programs runs every programs/*.asm on the RTL and compares it with the
+# C simulator; it probes internal signals, so it is RTL only.
+ifneq ($(GATES),yes)
+COCOTB_TEST_MODULES = test,test_programs
+else
 COCOTB_TEST_MODULES = test
+endif
+
+# The tests call the C assembler and simulator
+$(shell $(MAKE) -s -C $(PWD)/../tools cpu8asm cpu8sim >&2)
 
 # include cocotb's make rules to take care of the simulator setup
 include $(shell cocotb-config --makefiles)/Makefile.sim

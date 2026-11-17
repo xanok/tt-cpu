@@ -2,15 +2,11 @@
 """cocotb tests for cpu8. Each test assembles a small program, loads it into
 the SPI RAM model, runs until HLT and checks outputs / memory."""
 
-import os
-import sys
-
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
-from asm import assemble  # noqa: E402
+from cpu8tools import assemble
 
 HALTED = 4  # uio_out bit
 
@@ -61,13 +57,13 @@ async def test_alu_memory(dut):
         SUB y      ; 0x64
         STA r_sub
         LDA x
-        AND y
+        ANI 0x64
         STA r_and
         LDA x
-        OR y
+        ORI 0x64
         STA r_or
         LDA x
-        XOR y
+        XRI 0x64
         STA r_xor
         LDI 0x0F
         NOT
@@ -256,3 +252,123 @@ n:      .byte 0
     assert u(dut.uo_out) == 64
     dut._log.info(f"strlen(64 chars): hardware {hw} cycles, software {sw} cycles "
                   f"({sw / hw:.1f}x faster)")
+
+
+@cocotb.test()
+async def test_immediates(dut):
+    """SBI / CPI / CPX flags and results."""
+    await boot(dut, """
+        LDI 10
+        SBI 3           ; 7, C=0
+        JC  fail
+        STA r0
+        SBI 8           ; 7-8 = 0xFF, borrow
+        JC  b1
+        JMP fail
+b1:     STA r1
+        CPI 0xFF        ; equal: Z=1, C=0, A unchanged
+        JNZ fail
+        JC  fail
+        LDX 3
+        CPX 4           ; 3 < 4: C=1
+        JC  b2
+        JMP fail
+b2:     CPX 3
+        JNZ fail
+        STA r2          ; still 0xFF
+        LDI 0x5A
+        OUT
+        HLT
+fail:   LDI 0xEE
+        OUT
+        HLT
+        .org 0x200
+r0:     .byte 0
+r1:     .byte 0
+r2:     .byte 0
+""")
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 0x5A
+    base = 0x200
+    assert [mem(dut, base + i) for i in range(3)] == [7, 0xFF, 0xFF]
+
+
+@cocotb.test()
+async def test_index_register(dut):
+    """Copy a table with LDA ea,X / STA ea,X, sum it with ADD ea,X."""
+    await boot(dut, """
+        LDX 4
+copy:   DEX
+        LDA src,X
+        STA dst,X
+        TXA
+        JNZ copy
+        LDI 0
+        LDX 0
+sum:    ADD dst,X
+        INX
+        CPX 4
+        JNZ sum
+        OUT             ; 1+2+3+250 = 256 -> 0, carry from last add
+        TAX
+        TXA
+        HLT
+        .org 0x300
+src:    .byte 1, 2, 3, 250
+        .org 0x8FE      ; dst crosses a page boundary: ea + X carries into hi
+dst:    .byte 0, 0, 0, 0
+""")
+    await run_to_halt(dut)
+    assert [mem(dut, 0x8FE + i) for i in range(4)] == [1, 2, 3, 250]
+    assert u(dut.uo_out) == 0
+
+
+@cocotb.test()
+async def test_call_ret_stack(dut):
+    """Nested CALLs, PUSH/POP and the return addresses in the stack page."""
+    await boot(dut, """
+        LDI 1
+        CALL f          ; f: A*2 via g, pushes/pops around
+        OUT             ; 1 -> f -> 2+1 = 3 ... see below
+        HLT
+f:      PUSH            ; save 1
+        CALL g          ; A = 2
+        STA t
+        POP             ; A = 1
+        ADD t           ; 1 + 2 = 3
+        RET
+g:      SHL
+        RET
+t:      .byte 0
+""")
+    await run_to_halt(dut)
+    assert u(dut.uo_out) == 3
+    # outer CALL at 0x002 pushed return 0x004 at 0xFFE/0xFFF (high byte first)
+    assert mem(dut, 0xFFE) == 0x00 and mem(dut, 0xFFF) == 0x04
+    # inner CALL at 0x00A pushed 0x00C below the saved A (0xFFD = 1)
+    assert mem(dut, 0xFFD) == 1
+    assert mem(dut, 0xFFB) == 0x00 and mem(dut, 0xFFC) == 0x0C
+
+
+@cocotb.test()
+async def test_recursion_deep(dut):
+    """Recursive countdown 100 levels deep (200 stack bytes)."""
+    await boot(dut, """
+        LDI 100
+        CALL down
+        LDA depth
+        OUT
+        HLT
+down:   JZ  done
+        PUSH
+        LDA depth
+        ADI 1
+        STA depth
+        POP
+        ADI -1
+        CALL down
+done:   RET
+depth:  .byte 0
+""")
+    await run_to_halt(dut, max_cycles=2_000_000)
+    assert u(dut.uo_out) == 100

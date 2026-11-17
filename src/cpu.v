@@ -2,7 +2,9 @@
  * cpu8 - tiny 8-bit accumulator CPU with an SPI memory bus
  * SPDX-License-Identifier: Apache-2.0
  *
- * - One accumulator A, flags Z and C, 12-bit PC (4 KB address space).
+ * - Accumulator A, index register X, stack pointer SP, flags Z and C,
+ *   12-bit PC (4 KB address space). The stack lives in page 0xF
+ *   (0xF00-0xFFF) and grows down from 0xFFF.
  * - Code and data share one external SPI RAM (23LC512-style, mode 0,
  *   READ=0x03 / WRITE=0x02, 16-bit address), e.g. the TT demo board's
  *   RP2040 running spi-ram-emu. SCK = clk/2.
@@ -25,10 +27,21 @@ module cpu8 (
     input  wire       spi_miso
 );
 
-  localparam OP_LDI = 4'h0, OP_LDA = 4'h1, OP_STA = 4'h2, OP_ADD = 4'h3,
-             OP_SUB = 4'h4, OP_AND = 4'h5, OP_OR  = 4'h6, OP_XOR = 4'h7,
-             OP_ADI = 4'h8, OP_JMP = 4'h9, OP_JZ  = 4'hA, OP_JC  = 4'hB,
+  localparam OP_IMM = 4'h0, OP_LDA = 4'h1, OP_STA = 4'h2, OP_ADD = 4'h3,
+             OP_SUB = 4'h4, OP_LDX = 4'h5, OP_STX = 4'h6, OP_ADX = 4'h7,  // ea,X forms
+             OP_CAL = 4'h8, OP_JMP = 4'h9, OP_JZ  = 4'hA, OP_JC  = 4'hB,
              OP_JNZ = 4'hC, OP_MSC = 4'hD, OP_CMP = 4'hE, OP_STR = 4'hF;
+
+  // immediate group (op 0), selected by hi
+  localparam I_LDI = 4'h0, I_ADI = 4'h1, I_SBI = 4'h2, I_ANI = 4'h3,
+             I_ORI = 4'h4, I_XRI = 4'h5, I_CPI = 4'h6, I_LDX = 4'h7,
+             I_CPX = 4'h8;
+
+  // misc group (op D), selected by hi
+  localparam M_OUT = 4'h0, M_IN  = 4'h1, M_SHL = 4'h2, M_SHR = 4'h3,
+             M_NOT = 4'h4, M_HLT = 4'h5, M_TAX = 4'h6, M_TXA = 4'h7,
+             M_INX = 4'h8, M_DEX = 4'h9, M_PSH = 4'hA, M_POP = 4'hB,
+             M_RET = 4'hC;
 
   localparam S_FETCH = 3'd0,  // start 2-byte read at PC
              S_FWAIT = 3'd1,  // wait for instruction bytes
@@ -39,42 +52,94 @@ module cpu8 (
 
   reg  [2:0]  state;
   reg  [11:0] pc;
-  reg  [7:0]  a;
+  reg  [7:0]  a, x, sp;
   reg         zf, cf;
   reg  [7:0]  ir, arg;
 
   wire [3:0]  op = ir[7:4];
-  wire [11:0] ea = {ir[3:0], arg};
+  wire [3:0]  hi = ir[3:0];
+  wire [11:0] ea = {hi, arg};
+
+  wire is_msc  = (op == OP_MSC);
+  wire m_push  = is_msc && hi == M_PSH;
+  wire m_pop   = is_msc && hi == M_POP;
+  wire m_ret   = is_msc && hi == M_RET;
+  wire is_call = (op == OP_CAL);
+  wire indexed = (op == OP_LDX) || (op == OP_STX) || (op == OP_ADX);
+  wire write   = (op == OP_STA) || (op == OP_STX) || m_push || is_call;
+
+  // ---------------- address generation ----------------
+  // One adder for SP: CALL -2, PUSH -1, POP +1, RET +2. Pushes pre-decrement.
+  wire [7:0]  sp_new = sp + (is_call ? 8'hFE : m_push ? 8'hFF : m_ret ? 8'h02 : 8'h01);
+  wire [11:0] maddr  = indexed            ? ea + {4'h0, x} :
+                       (m_push | is_call) ? {4'hF, sp_new} :
+                       (m_pop  | m_ret)   ? {4'hF, sp} : ea;
+
+  // Memory-class instructions start an SPI transaction in S_EXEC
+  wire mem_op  = (op != OP_IMM && op != OP_MSC && op != OP_JMP && op != OP_JZ &&
+                  op != OP_JC  && op != OP_JNZ) || m_push || m_pop || m_ret;
+
+  // ---------------- transaction request (one shared start path) ----------------
+  wire        t_fetch = (state == S_FETCH);
+  wire        t_go    = t_fetch || (state == S_EXEC && mem_op);
+  wire        t_wr    = !t_fetch && write;
+  wire        t_two   = t_fetch || is_call || m_ret;        // 2 data bytes
+  wire [11:0] t_addr  = t_fetch ? pc : maddr;
+  wire [15:0] t_data  = is_call ? {4'h0, pc} : {a, 8'h00};  // pc is already PC+2
 
   // ---------------- SPI shifter ----------------
-  reg  [31:0] tx;      // cmd(8) addr(16) wdata(8), shifted out MSB first
+  reg  [39:0] tx;      // cmd(8) addr(16) data(16), shifted out MSB first
   reg  [15:0] rx;      // last 16 bits received
   reg  [5:0]  bitcnt;
   reg  [5:0]  lastbit; // index of last bit in this transaction
   reg         busy;
 
-  assign spi_mosi = tx[31];
+  assign spi_mosi = tx[39];
   assign halted   = (state == S_HALT);
 
   // ---------------- ALU ----------------
-  wire [7:0] b = (state == S_MWAIT) ? rx[7:0] : arg;
-  reg  [8:0] alu;  // {carry, result}
+  // fn: 0 pass, 1 add, 2 sub, 3 and, 4 or, 5 xor
+  reg [2:0] fn;
   always @* begin
     case (op)
-      OP_ADD, OP_ADI: alu = {1'b0, a} + {1'b0, b};
-      OP_SUB, OP_CMP: alu = {1'b0, a} - {1'b0, b};  // carry = borrow
-      OP_AND:         alu = {cf, a & b};
-      OP_OR:          alu = {cf, a | b};
-      OP_XOR:         alu = {cf, a ^ b};
-      default:        alu = {cf, b};                // LDI, LDA
+      OP_IMM: case (hi)
+        I_ADI:        fn = 3'd1;
+        I_SBI, I_CPI, I_CPX: fn = 3'd2;
+        I_ANI:        fn = 3'd3;
+        I_ORI:        fn = 3'd4;
+        I_XRI:        fn = 3'd5;
+        default:      fn = 3'd0;           // LDI, LDX
+      endcase
+      OP_ADD, OP_ADX: fn = 3'd1;
+      OP_SUB, OP_CMP: fn = 3'd2;
+      default:        fn = 3'd0;           // LDA, LDA ea,X, POP
     endcase
   end
+
+  wire [7:0] lhs = (op == OP_IMM && hi == I_CPX) ? x : a;
+  wire [7:0] b   = (state == S_MWAIT) ? rx[7:0] : arg;
+  reg  [8:0] alu;  // {carry, result}
+  always @* begin
+    case (fn)
+      3'd1:    alu = {1'b0, lhs} + {1'b0, b};
+      3'd2:    alu = {1'b0, lhs} - {1'b0, b};  // carry = borrow
+      3'd3:    alu = {cf, lhs & b};
+      3'd4:    alu = {cf, lhs | b};
+      3'd5:    alu = {cf, lhs ^ b};
+      default: alu = {cf, b};
+    endcase
+  end
+  wire alu_z = (alu[7:0] == 8'd0);
+
+  wire [7:0] x_step = x + ((hi == M_DEX) ? 8'hFF : 8'h01);  // INX / DEX
 
   always @(posedge clk) begin
     if (!rst_n) begin
       state    <= S_FETCH;
       pc       <= 12'd0;
       a        <= 8'd0;
+      x        <= 8'd0;
+      sp       <= 8'd0;
       zf       <= 1'b0;
       cf       <= 1'b0;
       ir       <= 8'd0;
@@ -82,7 +147,7 @@ module cpu8 (
       out_port <= 8'd0;
       spi_cs_n <= 1'b1;
       spi_sck  <= 1'b0;
-      tx       <= 32'd0;
+      tx       <= 40'd0;
       rx       <= 16'd0;
       bitcnt   <= 6'd0;
       lastbit  <= 6'd0;
@@ -96,7 +161,7 @@ module cpu8 (
         end else begin
           spi_sck <= 1'b0;
           rx      <= {rx[14:0], spi_miso};
-          tx      <= {tx[30:0], 1'b0};
+          tx      <= {tx[38:0], 1'b0};
           bitcnt  <= bitcnt + 6'd1;
           if (bitcnt == lastbit) begin
             busy <= 1'b0;
@@ -106,15 +171,16 @@ module cpu8 (
         end
       end
 
+      if (t_go) begin
+        tx       <= {7'b0000001, !t_wr, 4'h0, t_addr, t_data};  // 0x03 READ / 0x02 WRITE
+        lastbit  <= t_two ? 6'd39 : 6'd31;  // 24 header bits + 2 or 1 data bytes
+        bitcnt   <= 6'd0;
+        busy     <= 1'b1;
+        spi_cs_n <= 1'b0;
+      end
+
       case (state)
-        S_FETCH: begin
-          tx       <= {8'h03, 4'h0, pc, 8'h00};
-          lastbit  <= 6'd39;  // 24 header bits + 2 data bytes
-          bitcnt   <= 6'd0;
-          busy     <= 1'b1;
-          spi_cs_n <= 1'b0;
-          state    <= S_FWAIT;
-        end
+        S_FETCH: state <= S_FWAIT;
 
         S_FWAIT: if (!busy) begin
           ir    <= rx[15:8];
@@ -126,26 +192,31 @@ module cpu8 (
         S_EXEC: begin
           state <= S_FETCH;
           case (op)
-            OP_LDI, OP_ADI: begin
-              a  <= alu[7:0];
-              cf <= alu[8];
-              zf <= (alu[7:0] == 8'd0);
-            end
-            OP_LDA, OP_ADD, OP_SUB, OP_AND, OP_OR, OP_XOR, OP_CMP,
-            OP_STA: begin
-              tx       <= {(op == OP_STA) ? 8'h02 : 8'h03, 4'h0, ea, a};
-              lastbit  <= 6'd31;
-              bitcnt   <= 6'd0;
-              busy     <= 1'b1;
-              spi_cs_n <= 1'b0;
-              state    <= S_MWAIT;
+            OP_IMM: case (hi)
+              I_LDI, I_ADI, I_SBI, I_ANI, I_ORI, I_XRI: begin
+                a  <= alu[7:0];
+                cf <= alu[8];
+                zf <= alu_z;
+              end
+              I_CPI, I_CPX: begin
+                cf <= alu[8];
+                zf <= alu_z;
+              end
+              I_LDX: begin
+                x  <= arg;
+                zf <= (arg == 8'd0);
+              end
+              default: ;  // reserved: NOP
+            endcase
+            OP_LDA, OP_STA, OP_ADD, OP_SUB, OP_CMP, OP_LDX, OP_STX, OP_ADX,
+            OP_CAL: begin
+              state <= S_MWAIT;
+              if (is_call) begin  // return address is written as 2 bytes
+                sp <= sp_new;
+                pc <= ea;
+              end
             end
             OP_STR: begin  // STRLEN ea: one sequential read, count until NUL
-              tx       <= {8'h03, 4'h0, ea, 8'h00};
-              lastbit  <= 6'd31;
-              bitcnt   <= 6'd0;
-              busy     <= 1'b1;
-              spi_cs_n <= 1'b0;
               a        <= 8'd0;
               state    <= S_STRL;
             end
@@ -153,24 +224,33 @@ module cpu8 (
             OP_JZ:  if (zf)  pc <= ea;
             OP_JC:  if (cf)  pc <= ea;
             OP_JNZ: if (!zf) pc <= ea;
-            OP_MSC: case (ir[3:0])
-              4'h0: out_port <= a;                                    // OUT
-              4'h1: begin a <= in_port; zf <= (in_port == 8'd0); end  // IN
-              4'h2: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end // SHL
-              4'h3: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end // SHR
-              4'h4: begin a <= ~a; zf <= (a == 8'hFF); end            // NOT
-              4'h5: state <= S_HALT;                                  // HLT
-              default: ;                                              // NOP
+            OP_MSC: case (hi)
+              M_OUT: out_port <= a;
+              M_IN:  begin a <= in_port; zf <= (in_port == 8'd0); end
+              M_SHL: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end
+              M_SHR: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end
+              M_NOT: begin a <= ~a; zf <= (a == 8'hFF); end
+              M_HLT: state <= S_HALT;
+              M_TAX: begin x <= a; zf <= (a == 8'd0); end
+              M_TXA: begin a <= x; zf <= (x == 8'd0); end
+              M_INX, M_DEX: begin x <= x_step; zf <= (x_step == 8'd0); end
+              M_PSH, M_POP, M_RET: begin
+                state <= S_MWAIT;
+                sp    <= sp_new;
+              end
+              default: ;  // NOP
             endcase
             default: ;
           endcase
         end
 
         S_MWAIT: if (!busy) begin
-          if (op != OP_STA) begin
+          if (m_ret) begin
+            pc <= rx[11:0];
+          end else if (!write) begin  // loads, ALU ops, CMP, POP
             if (op != OP_CMP) a <= alu[7:0];
             cf <= alu[8];
-            zf <= (alu[7:0] == 8'd0);
+            zf <= alu_z;
           end
           state <= S_FETCH;
         end

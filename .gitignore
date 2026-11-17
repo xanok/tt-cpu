@@ -15,3 +15,8 @@ fpga/build/
 __pycache__/
 .venv-art/
 releases/
+programs/build/
+tools/cpu8asm
+tools/cpu8sim
+tools/cpu8load
+rp2040/build/
