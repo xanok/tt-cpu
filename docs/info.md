@@ -21,10 +21,12 @@ cpu8 is a tiny 8-bit CPU with an accumulator, an index register X and a stack (C
 
 ## How to test
 
-1. On the demo board, run [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu) on the RP2040, wired to uio[0] CS#, uio[1] MOSI, uio[2] MISO and uio[3] SCK.
-2. While the design is held in reset, copy the program image (`tools/cpu8asm -o prog.bin prog.asm`) into the emulated RAM, starting at address 0. `tools/cpu8load` together with the firmware in `rp2040/` does this over USB.
-3. Select the project, set the clock to 10 MHz (SCK = 5 MHz, well under the emulator's 12.5 MHz READ limit), and release reset. Watch `uo_out` on the 7-segment display, and the HALTED pin.
+1. Put the firmware from this repository's `rp2040/` folder on the demo board's RP2040. It emulates the SPI RAM (a modified copy of [spi-ram-emu](https://github.com/MichaelBell/spi-ram-emu)) on uio[0] CS#, uio[1] MOSI, uio[2] MISO and uio[3] SCK, and drives the MISO_RISE strap on uio[6]. The unmodified spi-ram-emu does not fit this pin order.
+2. Assemble a program (`tools/cpu8asm -o prog.bin prog.asm`) and run `tools/cpu8load -p <project address> -a prog.bin`. It holds the design in reset, copies the program into the emulated RAM at address 0, sets the clock to 10 MHz (SCK = 5 MHz, well under the emulator's 12.5 MHz READ limit) and releases reset.
+3. The program's `OUT` bytes are printed as text. `uo_out` also shows on the 7-segment display, and the HALTED pin goes high at `HLT`.
+
+Reset is synchronous inside the chip: the clock must be running while `rst_n` is low.
 
 ## External hardware
 
-None beyond the demo board: the RP2040 emulates the SPI RAM. A real 23LC512 (16-bit address) also works.
+None beyond the demo board: the RP2040 emulates the SPI RAM. A real 23LC512 (16-bit address) in sequential mode should also work, with MISO_RISE tied low; this is untested.
