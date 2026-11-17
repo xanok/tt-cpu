@@ -111,7 +111,7 @@ The chip targets **GlobalFoundries GF180MCU** on the Tiny Tapeout shuttle **ttgf
 |---|---|
 | Utilization | 80% |
 | Clock target | 25 MHz (`CLOCK_PERIOD` 40 ns); the chip is meant to run at 10 MHz |
-| Worst setup / hold slack | +0.7 ns / +0.13 ns over all corners (local run, LibreLane 3.0.14) |
+| Worst setup / hold slack | +2.1 ns / +0.14 ns over all corners (local run, LibreLane 3.0.14) |
 | Special setting | delay cells excluded (`EXTRA_EXCLUDED_CELLS`), see `src/config.json` |
 
 The design was first hardened for SkyWater sky130 (1x1 tile, 82% utilization, shuttle tag `ttsky26d`). That state, with its config and its metal-4 logo macro, is kept as the git tag **`sky130-verified`**. The silicon-art logo is regenerated for GF180 Metal4 (`macros/`, from `art/` with `tools/make_logo.py --pdk gf180mcuD`); the sky130 version of the macro is in the tag.

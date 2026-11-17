@@ -144,12 +144,16 @@ module cpu8 (
   // the flip-flops behind them already hold the same values: no glitch.
   reg  [7:0]  out_q;
   reg         strobe_q, cs_q, sck_q;
+  // HALTED has its own flip-flop. Decoding it from the 3 state bits gave a
+  // short false pulse on the pin whenever the state passed through a code
+  // next to S_HALT (seen on the gate-level netlist, at STRLEN).
+  reg         halted_q;
   assign out_port   = out_q & {8{rst_ni}};
   assign out_strobe = strobe_q & rst_ni;
   assign spi_cs_n   = cs_q | !rst_ni;
   assign spi_sck    = sck_q & rst_ni;
   assign spi_mosi   = tx[39] & rst_ni;
-  assign halted     = (state == S_HALT) & rst_ni;
+  assign halted     = halted_q & rst_ni;
 
   // ---------------- ALU ----------------
   // fn: 0 pass, 1 add, 2 sub, 3 and, 4 or, 5 xor
@@ -208,6 +212,7 @@ module cpu8 (
       arg      <= 8'd0;
       out_q    <= 8'd0;
       strobe_q <= 1'b0;
+      halted_q <= 1'b0;
       cs_q     <= 1'b1;
       sck_q    <= 1'b0;
       tx       <= 40'd0;
@@ -309,7 +314,7 @@ module cpu8 (
               M_SHL: begin {cf, a} <= {a, 1'b0};  zf <= (a[6:0] == 7'd0); end
               M_SHR: begin {a, cf} <= {1'b0, a};  zf <= (a[7:1] == 7'd0); end
               M_NOT: begin a <= ~a; zf <= (a == 8'hFF); end
-              M_HLT: state <= S_HALT;
+              M_HLT: begin state <= S_HALT; halted_q <= 1'b1; end
               M_TAX: begin x <= {4'h0, a}; zf <= (a == 8'd0); end
               M_TXA: begin a <= x[7:0]; zf <= (x[7:0] == 8'd0); end
               M_INX, M_DEX: begin x <= x_step; zf <= (x_step == 12'd0); end
@@ -356,8 +361,9 @@ module cpu8 (
         // disturbance ever puts the CPU there, end any open SPI transaction
         // and go back to fetching instead of hanging until reset.
         default: if (!busy) begin
-          cs_q <= 1'b1;
+          cs_q     <= 1'b1;
           gap      <= CS_GAP;
+          halted_q <= 1'b0;
           state    <= S_FETCH;
         end
       endcase
