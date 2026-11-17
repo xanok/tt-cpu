@@ -1,0 +1,9 @@
+{
+  "name": "cpu8-emutest",
+  "private": true,
+  "type": "module",
+  "description": "Replays the cpu8 chip's SPI waveform into rp2040js running the SPI RAM emulator",
+  "dependencies": {
+    "rp2040js": "1.4.2"
+  }
+}

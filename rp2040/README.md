@@ -85,9 +85,10 @@ In simulation (`test/`, `make MISO_RISE=yes`) all tests pass with stock timing a
 
 ## Timing limits (read this before choosing a clock)
 
-- **SCK limit:** spi-ram-emu READ works up to SCK = sys/10. cpu8 uses SCK = clk/2, so clk ≤ sys/5. The firmware rejects faster clocks. At the default 200 MHz system clock that is 40 MHz. The firmware runs the RP2040 at 200 MHz (`SYS_CLK_MHZ=200`, core at 1.15 V, flash at sys/4).
+- **Clock limit:** the firmware rejects a chip clock above sys/10, which is 20 MHz at the default 200 MHz system clock. The limit comes from the CS re-arm time below, not from SCK: spi-ram-emu READ works up to SCK = sys/10 and cpu8 uses SCK = clk/2, which alone would allow sys/5. The firmware runs the RP2040 at 200 MHz (`SYS_CLK_MHZ=200`, core at 1.15 V, flash at sys/4).
 - **CS re-arm time.** After CS goes high, core1 has to abort the DMA and restart both state machines before the next transaction's first SCK edge. The core1 re-arm path is about 40 instructions in the disassembly, roughly 50–65 cycles, plus input synchronisers and DMA abort latency. Michael Bell's README also estimates "around 50 SYS clocks". At 200 MHz that is about 300 ns.
   - cpu8 used to keep CS high for only 1–2 clocks, too short at 10 MHz. `src/cpu.v` now holds CS high for **at least 8 clocks** between transactions (`CS_GAP`): 800 ns at 10 MHz, or about 160 RP2040 clocks at 200 MHz. That leaves a good margin, so 10 MHz is the default.
+  - In the rp2040js replay test (`emutest/`) the re-arm takes about 80 system clocks, and the emulator works at 10 system clocks per chip clock and fails at 8. So the 10 MHz default has a factor of two in hand. rp2040js counts CPU cycles only approximately, so this is indicative.
   - This is still the first thing to suspect if the CPU misbehaves on the board. Try a lower `-f` to check.
 - uo_out streaming (`MON 1`) samples the pins in the core0 loop. Changes faster than the loop plus USB can carry are merged, and you see the latest value.
 
@@ -115,7 +116,7 @@ cpu8 toggles OUT_STROBE (uio5) on every `OUT`, so even repeated values are visib
 | `ATTACH` / `DETACH` | `OK` | drive or float ui_in and MISO without selecting a project (for example when it is already selected) |
 | `RST` | `OK` | hold rst_n low |
 | `GO` | `OK` | rst_n low for ≥ max(1 ms, 10 clocks), then release. `ERR` if the clock is stopped |
-| `CLK hz` | `OK <actual Hz>` | PWM on the clk pin: sys / (div × period), so for example 9.5 MHz gives 9523809. `0` stops it (pin low). `ERR` above sys/5 or below about 12 Hz |
+| `CLK hz` | `OK <actual Hz>` | PWM on the clk pin: sys / (div × period), so for example 9.5 MHz gives 9523809. `0` stops it (pin low). `ERR` above sys/10 or below about 12 Hz |
 | `UI val` | `OK` | 0..255 |
 | `EDGE 0\|1` | `OK` | MISO_RISE strap; holds the project in reset |
 | `W addr hex` | `OK <n>` | write up to 128 bytes |
@@ -136,6 +137,10 @@ cpu8 has no text input, but the RP2040 is its RAM. Programs that use `programs/l
 `cpu8load -k` prints the program's output as text and sends everything that arrives on its standard input with `PUT`. On a terminal you type a line and press Enter; the terminal echoes it. Input can also be piped: `printf 'Ana\n42\n' | cpu8load -k ask.bin`. This is tested on the mock board, not yet on hardware.
 
 The `cpu8load` sequence is: `PING`, [`SYSCLK`], `RST`, `SEL p` or `ATTACH`, `FILL 0 4096 0`, then `W` in 128-byte chunks, then `R` to read everything back and verify, `CLK f`, `UI v`, `EDGE e`, [`MON 1`], `GO`. Then it polls `ST` and/or follows `EV` lines until HALTED or the timeout, then `ST`, [`MON 0`], and `R` for each `-r` dump.
+
+## Testing the emulator's PIO program without hardware
+
+`emutest/` runs the real `sram.c` and `sram.pio` in [rp2040js](https://github.com/wokwi/rp2040js) and replays the SPI waveform recorded from the chip's Verilog into it. See [emutest/README.md](emutest/README.md).
 
 ## Testing without hardware
 

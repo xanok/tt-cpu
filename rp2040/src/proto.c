@@ -133,8 +133,11 @@ static void hold_reset(void)
 
 static uint32_t max_clock(void)
 {
-    // spi-ram-emu READ works up to SCK = sys/10, and cpu8 runs SCK = clk/2.
-    return hw_sys_hz() / 5;
+    // Two limits. spi-ram-emu READ works up to SCK = sys/10 and cpu8 runs
+    // SCK = clk/2, which allows sys/5. But cpu8 keeps CS high for only 8 of
+    // its clocks between transactions, and the emulator needs about 80
+    // system clocks to re-arm (emutest/: works at 10 per clock, fails at 8).
+    return hw_sys_hz() / 10;
 }
 
 static void cmd_help(void)
