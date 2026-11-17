@@ -5,11 +5,11 @@ MACRO unisc_logo
   CLASS BLOCK ;
   FOREIGN unisc_logo 0 0 ;
   ORIGIN 0 0 ;
-  SIZE 10.800 BY 10.800 ;
+  SIZE 20.600 BY 20.600 ;
   SYMMETRY X Y ;
   OBS
-    LAYER met4 ;
-      RECT 0.000 0.000 10.800 10.800 ;
+    LAYER Metal4 ;
+      RECT 0.000 0.000 20.600 20.600 ;
   END
 END unisc_logo
 END LIBRARY

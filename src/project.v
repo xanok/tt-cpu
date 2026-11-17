@@ -5,6 +5,11 @@
 
 `default_nettype none
 
+// Silicon art: UNISC grid icon on Metal4 (macros/unisc_logo.*). No logic, no pins.
+(* blackbox *) (* keep *)
+module unisc_logo ();
+endmodule
+
 module tt_um_xanok_cpu8 (
     input  wire [7:0] ui_in,    // input port (IN instruction)
     output wire [7:0] uo_out,   // output port (OUT instruction)
@@ -41,5 +46,10 @@ module tt_um_xanok_cpu8 (
   assign uio_oe  = 8'b0011_1011;
 
   wire _unused = &{ena, uio_in[7], uio_in[5:3], uio_in[1:0], 1'b0};
+
+`ifndef SYNTH_FPGA
+  (* keep *)
+  unisc_logo logo ();
+`endif
 
 endmodule

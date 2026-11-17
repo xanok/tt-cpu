@@ -37,6 +37,27 @@
   "//": "https://tinytapeout.com/faq/#how-can-i-map-an-additional-external-clock-to-one-of-the-gpios",
   "CLOCK_PORT": "clk",
 
+  "//": "Silicon art: UNISC grid icon on Metal4, 20.6 x 20.6 um",
+  "//": "(tools/make_logo.py art/unisc_icon.txt --name unisc_logo --pdk gf180mcuD --pixel 1.4).",
+  "//": "It sits between the 1st and 2nd pair of vertical Metal4 power stripes (x = 18.9-23.8 and 57.8-62.7 um).",
+  "//": "FP_MACRO_*_HALO: cells are kept 2 um away instead of the default 10 um; the logo is Metal4 only.",
+  "MACROS": {
+    "unisc_logo": {
+      "instances": {
+        "logo": {
+          "location": [30.0, 7.84],
+          "orientation": "N"
+        }
+      },
+      "gds": ["dir::../macros/unisc_logo.gds"],
+      "lef": ["dir::../macros/unisc_logo.lef"]
+    }
+  },
+  "FP_MACRO_HORIZONTAL_HALO": 2,
+  "FP_MACRO_VERTICAL_HALO": 2,
+  "IGNORE_DISCONNECTED_MODULES": ["unisc_logo", "logo"],
+  "ERROR_ON_DISCONNECTED_PINS": false,
+
   "//": "Configuration docs: https://librelane.readthedocs.io/en/latest/reference/configuration.html",
 
   "//": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
