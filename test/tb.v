@@ -63,6 +63,7 @@ module tb ();
       .cs_n(uio_out[0]),
       .sck (uio_out[3]),
       .mosi(uio_out[1]),
+      .in_valid(1'b0), .in_data(8'h00), .in_clr(1'b0), .in_take(),
       .miso(ram_miso)
   );
 

@@ -6,7 +6,8 @@
  *   S1      reset: press to restart the program
  *   S2      ui_in[1] (ui_in[0] reads 0)
  *   UART    every OUT byte, 115200 8N1, over the board's USB-C cable
- *           (the second serial port, e.g. /dev/ttyUSB1)
+ *           (the second serial port, e.g. /dev/ttyUSB1); bytes sent by
+ *           the PC go to the input mailbox (programs/lib/input.asm)
  */
 `default_nettype none
 
@@ -15,7 +16,8 @@ module tangnano20k_top (
     input  wire       btn_s1,  // reset (high when pressed)
     input  wire       btn_s2,  // -> ui_in[1]
     output wire [5:0] led,     // active low, shows uo_out[5:0]
-    output wire       uart_tx  // OUT bytes to the PC
+    output wire       uart_tx, // OUT bytes to the PC
+    input  wire       uart_rx  // keyboard input from the PC
 );
   // Power-on reset, then S1 resets the CPU (synchronised)
   reg [7:0] por = 8'd0;
@@ -40,12 +42,28 @@ module tangnano20k_top (
       .rst_n  (rst_n)
   );
 
-  spi_ram_model #(.AW(12), .INIT("build/prog.hex")) ram (
+  wire       in_valid, in_take;
+  wire [7:0] in_data;
+
+  uart_in #(.CLK_HZ(27_000_000), .BAUD(115_200)) keyboard (
+      .clk  (clk),
+      .rst_n(rst_n),
+      .rx   (uart_rx),
+      .valid(in_valid),
+      .data (in_data),
+      .take (in_take)
+  );
+
+  spi_ram_model #(.AW(12), .INIT("build/prog.hex"), .MBOX(1)) ram (
       .clk (clk),
       .cs_n(uio_out[0]),
       .sck (uio_out[3]),
       .mosi(uio_out[1]),
-      .miso(miso)
+      .miso(miso),
+      .in_valid(in_valid),
+      .in_data (in_data),
+      .in_clr  (!rst_n),
+      .in_take (in_take)
   );
 
   assign led = ~uo_out[5:0];

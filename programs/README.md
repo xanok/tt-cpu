@@ -41,6 +41,6 @@ Each program's header comments hold its expected output. `./run_tests.sh` assemb
 ../tools/cpu8load -k ask.bin           # interactive, on the demo board
 ```
 
-`lib/input.asm` is the text input library (`getchar`, `getline`). It reads from the input mailbox, two RAM bytes (flag 0xEFE, data 0xEFF) that the RP2040 or the simulator fills with what you type; the file's header explains the handshake. It doesn't work on the Tang Nano 20K build, which has no path from the PC into the RAM. A `; stdin: text` header line gives a program its input in the tests.
+`lib/input.asm` is the text input library (`getchar`, `getline`). It reads from the input mailbox, two RAM bytes (flag 0xEFE, data 0xEFF) that the RP2040 or the simulator fills with what you type; the file's header explains the handshake. On the Tang Nano 20K the FPGA does the RP2040's part: bytes received on the UART go into the mailbox (see the main README). A `; stdin: text` header line gives a program its input in the tests.
 
 `lib/print.asm` is the text output library (`print`, `print_dec`, `print_hex`, `newline`). Include it with `.include "lib/print.asm"` after your program's last instruction.

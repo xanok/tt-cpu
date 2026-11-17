@@ -29,7 +29,7 @@ Toolchain: `source ~/tools/oss-cad-suite/environment`
 | Build FPGA bitstream | `cd fpga && make` (or `make PROG=../programs/other.asm`) |
 | Flash to SRAM (temporary) | `cd fpga && make flash` |
 | Flash permanently | `cd fpga && make flash-persist` |
-| Simulate the FPGA top (UART output vs cpu8sim) | `cd fpga && make sim PROG=../programs/hello.asm` |
+| Simulate the FPGA top (UART output vs cpu8sim; a `; stdin:` header is typed on the UART) | `cd fpga && make sim PROG=../programs/hello.asm` |
 
 ## Running an example on the Tang Nano 20K
 
@@ -47,6 +47,7 @@ picocom -b 115200 /dev/ttyUSB1                   # text output (2nd port of the 
 - **S1:** reset. Press it to run the program again, for example after opening the terminal.
 - **S2:** `ui_in[1]`. `ui_in[0]` reads 0.
 - **UART:** every byte written with `OUT` goes over the board's USB-C cable at 115200 8N1 (FPGA pin 69), so `hello`, `print_demo`, `squares` and `hanoi` print text. A 1 KB FIFO absorbs bursts; when it is full, bytes are dropped.
+- **Keyboard input:** what you type in the terminal goes to the FPGA (pin 70) and into the input mailbox, so programs that use `lib/input.asm` work: `make PROG=../programs/ask.asm flash`. Two things differ from `cpu8load -k`. Start picocom with `--echo --omap crlf`, which shows what you type and sends Enter as a newline. And the program starts at power-on, so its first prompt is printed before the terminal is open; press S1 to see it. The receive FIFO holds 64 bytes.
 - The board shows up as two serial ports. Use the second one, usually `/dev/ttyUSB1`. If `openFPGALoader` reports "permission denied", the USB device needs a udev rule, which needs root.
 
 ## Before submitting to Tiny Tapeout

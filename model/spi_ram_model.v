@@ -12,6 +12,14 @@
  * EARLY = 1: MISO changes right after the rising SCK edge, like the stock
  *            spi-ram-emu (the master must sample on the rising edge: cpu8
  *            strap MISO_RISE = 1). Simulation only.
+ *
+ * MBOX = 1:  (FPGA build, EARLY = 0 only) the input mailbox of
+ *            programs/lib/input.asm, which on the demo board is filled by
+ *            the RP2040. Addresses 0xEFE (flag) and 0xEFF (data) are then
+ *            two registers beside the RAM. When in_valid is high, the flag
+ *            is 0 and no SPI transaction is running, in_data goes into the
+ *            data register, the flag becomes 1 and in_take pulses. The CPU
+ *            clears the flag by writing 0 to 0xEFE. in_clr clears the flag.
  */
 
 `default_nettype none
@@ -19,14 +27,25 @@
 module spi_ram_model #(
     parameter AW    = 12,
     parameter INIT  = "",
-    parameter EARLY = 0
+    parameter EARLY = 0,
+    parameter MBOX  = 0
 ) (
     input  wire clk,
     input  wire cs_n,
     input  wire sck,
     input  wire mosi,
-    output reg  miso
+    output reg  miso,
+    // input mailbox (MBOX = 1), tie in_valid and in_clr low otherwise
+    input  wire       in_valid,
+    input  wire [7:0] in_data,
+    input  wire       in_clr,
+    output wire       in_take
 );
+
+  localparam [15:0] MB_FLAG = 16'h0EFE, MB_DATA = 16'h0EFF;
+  reg       mb_flag = 1'b0;
+  reg [7:0] mb_data = 8'd0;
+  assign in_take = (MBOX != 0) && in_valid && !mb_flag && cs_n && !in_clr;
 
   reg [7:0] mem [0:(1<<AW)-1];
   initial if (INIT != "") $readmemh(INIT, mem);
@@ -39,7 +58,7 @@ module spi_ram_model #(
     reg [15:0] addr  = 16'd0;
     reg [7:0]  sh    = 8'd0;
     reg [7:0]  obuf  = 8'd0;
-    reg [7:0]  rd    = 8'd0;
+    wire [7:0] rd;
     initial miso = 1'b0;
 
     wire rise = sck & ~sck_q;
@@ -48,10 +67,22 @@ module spi_ram_model #(
     // Synchronous read port. When the last address bit arrives, look up the
     // fully assembled address so the first data bit is ready on the next fall.
     wire [AW-1:0] ra = (rise && cnt == 6'd23) ? {addr[AW-2:0], mosi} : addr[AW-1:0];
-    always @(posedge clk) rd <= mem[ra];
+    reg  [AW-1:0] ra_q = 0;
+    reg  [7:0]    rd_ram = 8'd0;
+    always @(posedge clk) begin
+      rd_ram <= mem[ra];
+      ra_q   <= ra;
+    end
+    assign rd = (MBOX != 0 && ra_q == MB_DATA[AW-1:0]) ? mb_data :
+                (MBOX != 0 && ra_q == MB_FLAG[AW-1:0]) ? {7'd0, mb_flag} : rd_ram;
 
     always @(posedge clk) begin
       sck_q <= sck;
+      if (in_clr) mb_flag <= 1'b0;
+      if (in_take) begin
+        mb_data <= in_data;
+        mb_flag <= 1'b1;
+      end
       if (cs_n) begin
         cnt  <= 6'd0;
         miso <= 1'b0;
@@ -62,6 +93,8 @@ module spi_ram_model #(
           sh <= {sh[6:0], mosi};
           if (cnt == 6'd31 && cmd == 8'h02) begin
             mem[addr[AW-1:0]] <= {sh[6:0], mosi};
+            if (MBOX != 0 && addr[AW-1:0] == MB_FLAG[AW-1:0]) mb_flag <= |{sh[6:0], mosi};
+            if (MBOX != 0 && addr[AW-1:0] == MB_DATA[AW-1:0]) mb_data <= {sh[6:0], mosi};
             addr <= addr + 16'd1;
           end
         end

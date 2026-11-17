@@ -87,7 +87,7 @@ msg:    .asciz "hello\n"
 
 ## Text input
 
-The chip has no text input instruction; `IN` only reads the 8 input pins. On the demo board the RP2040 is the CPU's RAM, so input is a software convention: a mailbox of two RAM bytes, flag at 0xEFE and data at 0xEFF. The RP2040 writes a byte to 0xEFF and sets the flag when the flag is 0; the program reads the byte and clears the flag. `programs/lib/input.asm` provides `getchar` and `getline`, `tools/cpu8load -k prog.bin` forwards the keyboard, and `tools/cpu8sim -k` (or `-I "text"`) does the same in the simulator. See `programs/ask.asm`.
+The chip has no text input instruction; `IN` only reads the 8 input pins. On the demo board the RP2040 is the CPU's RAM, so input is a software convention: a mailbox of two RAM bytes, flag at 0xEFE and data at 0xEFF. The RP2040 writes a byte to 0xEFF and sets the flag when the flag is 0; the program reads the byte and clears the flag. `programs/lib/input.asm` provides `getchar` and `getline`, `tools/cpu8load -k prog.bin` forwards the keyboard, and `tools/cpu8sim -k` (or `-I "text"`) does the same in the simulator. On the Tang Nano 20K the FPGA top fills the mailbox from its UART. See `programs/ask.asm`.
 
 ## Stack
 
