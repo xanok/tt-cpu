@@ -126,3 +126,30 @@ pico_add_linker_script_override_path(emu_test_stock ${CMAKE_CURRENT_LIST_DIR}/sp
 pico_enable_stdio_usb(emu_test_stock 0)
 pico_enable_stdio_uart(emu_test_stock 0)
 pico_add_extra_outputs(emu_test_stock)
+
+# ---- loop_test, loop_test_stock: loopback test of the emulator on a real
+# Pico 2 (emutest/loop.c, emutest/README.md). The third PIO block plays the
+# chip on GP2..GP5; four wires join them to the emulator's pins. Pico 2 only.
+if (TT_BOARD STREQUAL "pico2")
+    foreach(V IN ITEMS "" "_stock")
+        add_executable(loop_test${V} emutest/loop.c spi-ram-emu/sram.c)
+        target_include_directories(loop_test${V} PRIVATE src spi-ram-emu)
+        target_compile_options(loop_test${V} PRIVATE -Wall -Wextra)
+        target_compile_definitions(loop_test${V} PRIVATE ${TT_BOARD_DEF})
+        target_link_libraries(loop_test${V} pico_stdlib pico_multicore hardware_dma hardware_pio)
+        if (V STREQUAL "")
+            pico_generate_pio_header(loop_test ${CMAKE_CURRENT_LIST_DIR}/spi-ram-emu/sram.pio)
+            pico_generate_pio_header(loop_test ${CMAKE_CURRENT_LIST_DIR}/emutest/loop.pio)
+        else()
+            target_compile_definitions(loop_test_stock PRIVATE LOOP_STOCK)
+            pico_generate_pio_header(loop_test_stock ${CMAKE_BINARY_DIR}/stock/sram.pio OUTPUT_DIR ${CMAKE_BINARY_DIR}/stock)
+            pico_generate_pio_header(loop_test_stock ${CMAKE_CURRENT_LIST_DIR}/emutest/loop.pio OUTPUT_DIR ${CMAKE_BINARY_DIR}/stock)
+        endif()
+        pico_set_linker_script_var(loop_test${V} RAM_LENGTH 0x30000)
+        pico_add_linker_script_override_path(loop_test${V} ${CMAKE_CURRENT_LIST_DIR}/spi-ram-emu/ld
+            FILES memory_extra.incl section_extra_post_data.incl)
+        pico_enable_stdio_usb(loop_test${V} 1)
+        pico_enable_stdio_uart(loop_test${V} 0)
+        pico_add_extra_outputs(loop_test${V})
+    endforeach()
+endif()

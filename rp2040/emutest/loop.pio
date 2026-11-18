@@ -1,0 +1,13 @@
+; Loopback test (loop.c): plays the chip's side of the SPI link.
+; One pass of the loop is one chip clock of ratio = Y + 4 system clocks:
+; the pins CS, SCK, MOSI for that clock (3 bits from the drive buffer), then
+; MISO read at the end of the clock, where the chip samples it.
+; SPDX-License-Identifier: Apache-2.0
+.program loop_drive
+.wrap_target
+    out pins, 3          ; bit 0: CS_N, bit 1: SCK, bit 2: MOSI
+    mov x, y
+delay:
+    jmp x-- delay
+    in pins, 1           ; MISO
+.wrap

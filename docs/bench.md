@@ -7,7 +7,11 @@ A test of the whole system on real hardware before tapeout, without a Tiny Tapeo
 
 This exercises what simulation cannot: the SPI link over real pins, the RAM emulator on a real RP2350, both MISO strap settings, the loader, and keyboard input.
 
-**Status: prepared, not yet run.** The firmware and the bitstream build; nothing here has been tried on hardware. Check the two pin tables against the boards before connecting anything.
+**Status: prepared, not yet run.** The firmware and the bitstream build. Check the two pin tables against the boards before connecting anything.
+
+Done on hardware so far (2026-11-18, Pico 2 only, no Tang Nano yet): the loader firmware runs on the Pico 2, answers `cpu8load` over USB, and loads and reads back the emulated RAM.
+
+**Next, before the Tang Nano arrives:** the loopback test of the RAM emulator on the Pico 2 alone, with four jumper wires on the same board. It is built and was run once without the wires (the waveform plays at 10 MHz on time, the checks work); it has not been run with the wires. See [the loopback test](../rp2040/emutest/README.md#on-a-real-pico-2) for the wiring and the commands. The Pico 2 currently holds the loopback firmware: send `BOOT` to it (or hold BOOTSEL while plugging it in) and flash `cpu8_loader.uf2` before the bench test.
 
 ## What you need
 
@@ -75,6 +79,8 @@ tools/cpu8load -k ask.bin                     # keyboard input
 ```
 
 The Pico appears as `/dev/ttyACM0` (use `-d` for another name). The Tang Nano's own serial port is not used in this test.
+
+On Linux the serial port belongs to the `dialout` group. If `cpu8load` says "Permission denied", run `sudo usermod -aG dialout $USER` once and log in again (until then, `sg dialout -c "tools/cpu8load ..."` works).
 
 ## What to try, in order
 

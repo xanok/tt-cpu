@@ -59,3 +59,28 @@ The four pairings, `hello.asm`:
 - rp2040js is a functional emulator. Its CPU cycle counts are approximate and it has no input synchronisers, so the timing figures are indicative, not sign-off numbers.
 - The waveform is replayed, not fed back live. That is equivalent as long as every checked bit is right, which is what the test asserts.
 - Only `sram.c` and `sram.pio` are exercised: not the USB loader, the clock generation or the output capture.
+
+## On a real Pico 2
+
+The same check on hardware, without the chip: `loop.c` runs the emulator on core1 exactly as the loader firmware does (GP16..GP19). On core0, a state machine of the RP2350's third PIO block plays the chip's side of the recorded waveform on GP2..GP4 and reads MISO on GP5 at the end of every chip clock. `loop.py` sends the waveform over USB, reads the samples back, and checks every sampled bit and the RAM, as `replay.mjs` does. This tests the real RP2350 build, the real pads and both cores at real speed.
+
+**Status:** built, and run once without the wires on 2026-11-18 (the waveform played at 10 MHz without stalls; with nothing connected MISO is wrong, as it should be). Not yet run with the wires.
+
+Four jumper wires, all on the same Pico 2 (physical pin numbers in brackets):
+
+| Tester (plays the chip) | | Emulator |
+|---|---|---|
+| GP2 [4] CS_N | → | GP16 [21] |
+| GP3 [5] SCK | → | GP19 [25] |
+| GP4 [6] MOSI | → | GP17 [22] |
+| GP5 [7] MISO | ← | GP18 [24] |
+
+```sh
+make setup                                     # once: the trace tools
+cmake --build ../build_pico2 --target loop_test loop_test_stock
+# flash ../build_pico2/loop_test.uf2 (BOOTSEL, or "BOOT" from the loader firmware)
+./loop.py                                      # every halting example, both straps, 10 MHz
+./loop.py --sweep                              # ratio 40 down to 6
+```
+
+`-r` sets the ratio (system clocks per chip clock; 15 is 10 MHz at 150 MHz). The tester reads MISO through the RP2350's input synchronizer, 2 system clocks before the sampling edge; the real chip adds its own pad and multiplexer delay instead. `loop_test_stock.uf2` is the emulator with upstream's MISO timing, which should pass with strap 1 only. Send `BOOT` to get back to the bootloader, then flash `cpu8_loader.uf2` again.
