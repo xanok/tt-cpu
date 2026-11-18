@@ -12,6 +12,7 @@ An 8-bit CPU (accumulator, index register X, stack with CALL/RET) that runs from
 | [rp2040/README.md](rp2040/README.md) | demo board firmware for the RP2350B and RP2040 boards: build, pin maps, serial protocol, timing limits |
 | [docs/bench.md](docs/bench.md) | hardware test before tapeout: Tang Nano 20K as the chip, Pico 2 as the demo board, wiring table |
 | [docs/info.md](docs/info.md) | the Tiny Tapeout datasheet page: pins, strap, reset |
+| [docs/schematics.md](docs/schematics.md) | interactive schematics of the chip, the FPGA tops, the testbench and the gate-level netlist, and how to show simulation values on them |
 
 ## Quick start
 
@@ -46,7 +47,8 @@ programs/       25 example programs, lib/print.asm and lib/input.asm, run_tests.
 rp2040/         demo board firmware (RP2350B and RP2040): SPI RAM emulator + USB loader; mock/ tests it on a PC
 test/           cocotb tests (TT CI runs these)
 fpga/           Tang Nano 20K top, UART in/out, pin constraints, Makefile
-docs/           isa.md, io.md, info.md, bench.md
+docs/           isa.md, io.md, info.md, bench.md, schematics.md
+schematics/     interactive schematics (HTML pages) and make.sh, which makes them again
 ```
 
 ## Commands
