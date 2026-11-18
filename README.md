@@ -1,6 +1,6 @@
 # cpu8: tiny 8-bit CPU for Tiny Tapeout
 
-An 8-bit CPU (accumulator, index register X, stack with CALL/RET) that runs from an external SPI RAM. It is prototyped on a Tang Nano 20K and targets a Tiny Tapeout submission.
+An 8-bit CPU (accumulator, index register X, stack with CALL/RET) that runs from an external SPI RAM. It is prototyped on a Tang Nano 20K and submitted to Tiny Tapeout (shuttle ttgf26c, GF180MCU).
 
 ## Documentation
 
@@ -116,9 +116,14 @@ The chip targets **GlobalFoundries GF180MCU** on the Tiny Tapeout shuttle **ttgf
 
 The design was first hardened for SkyWater sky130 (1x1 tile, 82% utilization, shuttle tag `ttsky26d`). That state, with its config and its metal-4 logo macro, is kept as the git tag **`sky130-verified`**. The silicon-art logo is regenerated for GF180 Metal4 (`macros/`, from `art/` with `tools/make_logo.py --pdk gf180mcuD`); the sky130 version of the macro is in the tag.
 
-## Before submitting to Tiny Tapeout
+## Submission
 
-- Make the repo public (TT needs public GitHub Actions) and turn on GitHub Pages.
-- Fill in `author` / `discord` in `info.yaml`.
-- Push to GitHub. The `gds` action hardens the design and shows whether it fits the tile count.
-- Submit the commit whose `gds` run passed.
+The chip is submitted to the Tiny Tapeout shuttle **ttgf26c**.
+
+| | |
+|---|---|
+| Submitted commit | `8770d9c`, git tag **`v1.0.0`** |
+| Tiny Tapeout project | [6593](https://app.tinytapeout.com/projects/6593) |
+| Shuttle pull request | [TinyTapeout/tinytapeout-gf-26c#48](https://github.com/TinyTapeout/tinytapeout-gf-26c/pull/48) |
+
+Later commits on `main` are not part of the chip unless the project is submitted again from the Tiny Tapeout app.
