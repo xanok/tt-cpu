@@ -18,3 +18,4 @@ else
     echo "test/gate_level_netlist.v is not here (it comes from a hardening run): gate_level.html is left as it is"
 fi
 ls -l schematics/*.html
+python3 schematics/pictures.py || true        # the SVG pictures in docs/schematics/ (needs Chrome)

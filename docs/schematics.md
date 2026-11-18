@@ -1,14 +1,36 @@
 # Schematics
 
-Interactive schematics of the Verilog, in [`schematics/`](../schematics/). Each page is a single HTML file that works offline: download it (or clone the repository) and open it in a browser. GitHub shows only the HTML source of these files, not the drawing.
+Interactive schematics of the Verilog. **Open them in the browser: [xanok.github.io/tt-cpu/schematics](https://xanok.github.io/tt-cpu/schematics/).** Each page is also a single HTML file in [`schematics/`](../schematics/) that works offline (GitHub's file view shows only its HTML source).
 
 | Page | Top module | What it shows |
 |------|------------|---------------|
-| [chip.html](../schematics/chip.html) | `tt_um_xanok_cpu8` | the chip as submitted: the Tiny Tapeout wrapper, the CPU core `cpu8` and the logo |
-| [tangnano20k.html](../schematics/tangnano20k.html) | `tangnano20k_top` | the Tang Nano 20K system: the chip, the SPI RAM as block RAM, the UART output and keyboard input |
-| [tangnano20k_chip.html](../schematics/tangnano20k_chip.html) | `tangnano20k_chip` | the FPGA build that plays the chip in the [bench test](bench.md) |
-| [testbench.html](../schematics/testbench.html) | `tb` | the cocotb testbench (`test/tb.v`): the chip wired to the SPI RAM model |
-| [gate_level.html](../schematics/gate_level.html) | `tt_um_xanok_cpu8` | the routed gate-level netlist of the local GF180 hardening used for the timing simulation ([test/README.md](../test/README.md)); its 3,334 cells are drawn as 47 groups |
+| [chip](https://xanok.github.io/tt-cpu/schematics/chip.html) | `tt_um_xanok_cpu8` | the chip as submitted: the Tiny Tapeout wrapper, the CPU core `cpu8` and the logo |
+| [Tang Nano 20K](https://xanok.github.io/tt-cpu/schematics/tangnano20k.html) | `tangnano20k_top` | the Tang Nano 20K system: the chip, the SPI RAM as block RAM, the UART output and keyboard input |
+| [bench test FPGA](https://xanok.github.io/tt-cpu/schematics/tangnano20k_chip.html) | `tangnano20k_chip` | the FPGA build that plays the chip in the [bench test](bench.md) |
+| [testbench](https://xanok.github.io/tt-cpu/schematics/testbench.html) | `tb` | the cocotb testbench (`test/tb.v`): the chip wired to the SPI RAM model |
+| [gate-level netlist](https://xanok.github.io/tt-cpu/schematics/gate_level.html) | `tt_um_xanok_cpu8` | the routed gate-level netlist of the local GF180 hardening used for the timing simulation ([test/README.md](../test/README.md)); its 3,334 cells are drawn as 47 groups |
+
+The pictures below are views of these pages; click one to open the page at that view.
+
+### The chip
+
+[![The chip: the CPU core, its output buses and the logo](schematics/chip.svg)](https://xanok.github.io/tt-cpu/schematics/chip.html)
+
+### The CPU core
+
+[![The CPU core cpu8: registers, the next-state logic, the ALU and the SPI master](schematics/cpu8.svg)](https://xanok.github.io/tt-cpu/schematics/chip.html#tt_um_xanok_cpu8/core)
+
+### The CPU state machine
+
+[![The state machine of cpu8: fetch, wait for the fetch, execute, wait for memory, string output, halt](schematics/cpu8_states.svg)](https://xanok.github.io/tt-cpu/schematics/chip.html#tt_um_xanok_cpu8/core/!state)
+
+### The Tang Nano 20K top
+
+[![The Tang Nano 20K top: the chip, the SPI RAM, the UARTs and the LEDs](schematics/tangnano20k.svg)](https://xanok.github.io/tt-cpu/schematics/tangnano20k.html)
+
+### The testbench
+
+[![The cocotb testbench: the chip and the SPI RAM model](schematics/testbench.svg)](https://xanok.github.io/tt-cpu/schematics/testbench.html)
 
 ## Reading a page
 
@@ -39,5 +61,7 @@ schematics/make.sh        # needs vlogview on the PATH
 ```
 
 vlogview itself is not public; the pages carry its viewer in compressed form.
+
+`make.sh` also makes the SVG pictures above again (`schematics/pictures.py`, needs Chrome). The pages are published to GitHub Pages by the `viewer` job of the GDS workflow, next to the 3D viewer of the layout.
 
 `gate_level.html` is only made again when `test/gate_level_netlist.v` is there (it comes from a hardening run, see [test/README.md](../test/README.md)).

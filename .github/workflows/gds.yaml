@@ -47,5 +47,81 @@ jobs:
     permissions:
       pages: write      # to deploy to Pages
       id-token: write   # to verify the deployment originates from an appropriate source
+    # The steps of TinyTapeout/tt-gds-action/viewer@ttgf26c (the 3D viewer of the
+    # layout), plus the schematic pages in schematics/: one Pages site has both.
+    #   https://xanok.github.io/tt-cpu/            3D viewer
+    #   https://xanok.github.io/tt-cpu/schematics/ schematics
     steps:
-      - uses: TinyTapeout/tt-gds-action/viewer@ttgf26c
+      - name: checkout repo
+        uses: actions/checkout@v6
+
+      - name: Download GDS artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: tt_submission
+
+      - name: Read PDK information from submission
+        working-directory: tt_submission
+        run: echo "PDK=$(jq -r '.PDK' pdk.json)" >> $GITHUB_ENV
+
+      - name: Download gds_render (png) artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: gds_render
+          path: gh-pages
+
+      - name: Copy OAS and GDSII
+        run: |
+          cp tt_submission/*.gds gh-pages/tinytapeout.gds
+          cp tt_submission/*.oas gh-pages/tinytapeout.oas
+
+      - name: Generate an HTML page that redirects to the 3D viewer
+        run: |
+          cat << EOF >> gh-pages/index.html
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <meta http-equiv="X-UA-Compatible" content="IE=edge">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Redirecting to 3D Viewer...</title>
+            </head>
+            <body>
+              <script>
+                location.href = "https://gds-viewer.tinytapeout.com/?pdk=${{ env.PDK }}&model=" + encodeURIComponent(location.href + '/tinytapeout.oas');
+              </script>
+            </body>
+            </html>
+          EOF
+
+      - name: Add the schematics
+        run: |
+          mkdir -p gh-pages/schematics
+          cp schematics/*.html gh-pages/schematics/
+
+      # a re-run keeps the artifacts of earlier attempts: a name per attempt
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: 'gh-pages'
+          name: github-pages-${{ github.run_attempt }}
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Display preview in workflow summary
+        run: |
+          PAGE_URL=$(echo "${{ steps.deployment.outputs.page_url }}" | sed -e 's/\/$//')
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          # 3D Viewer
+          [Open 3D viewer](https://gds-viewer.tinytapeout.com/?model=$PAGE_URL/tinytapeout.oas&pdk=$PDK)
+
+          # Schematics
+          [Open the schematics]($PAGE_URL/schematics/)
+
+          # 2D Preview
+          ![png]($PAGE_URL/gds_render.png)
+          EOF
